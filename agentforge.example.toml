@@ -1,0 +1,117 @@
+# AgentForge Configuration File
+# Copy to agentforge.toml or ~/.agentforge/config.toml
+
+# =============================================================================
+# Default LLM Configuration
+# =============================================================================
+
+[llm.default]
+# Provider: "anthropic", "openai", or "ollama"
+provider = "ollama"
+
+# Model name (provider-specific)
+# Anthropic: claude-sonnet-4-5, claude-haiku-3-5, claude-opus-4-5
+# OpenAI: gpt-4o, gpt-4o-mini, o1-mini
+# Ollama: qwen2.5-coder:7b, qwen2.5-coder:32b, llama3.1:8b
+model = "qwen2.5-coder:7b"
+
+# Temperature (0.0 = deterministic, 1.0 = creative)
+temperature = 0.2
+
+# Maximum tokens in response
+max_tokens = 4096
+
+# =============================================================================
+# Per-Agent LLM Overrides (optional)
+# =============================================================================
+
+# Use a cheaper model for DevOps (mostly templated output)
+[llm.devops_engineer]
+provider = "ollama"
+model = "qwen2.5-coder:7b"
+temperature = 0.0
+
+# Slightly higher temperature for creative PRD writing
+# [llm.product_manager]
+# temperature = 0.3
+
+# =============================================================================
+# Build Configuration
+# =============================================================================
+
+[build]
+# Output directory for generated projects
+output_dir = "./output"
+
+# Maximum retries when QA fails
+max_retries = 2
+
+# Enable interactive mode (pause at phase gates for review)
+interactive = false
+
+# Use LLM-based supervisor instead of deterministic (adds ~$0.10/build)
+use_llm_supervisor = false
+
+# =============================================================================
+# Sandbox Configuration
+# =============================================================================
+
+[sandbox]
+# Use Docker sandbox for code execution (recommended)
+use_docker = true
+
+# Execution timeout in seconds
+timeout_seconds = 90
+
+# Memory limit in MB
+memory_mb = 512
+
+# =============================================================================
+# Observability
+# =============================================================================
+
+[observability]
+# Enable LangSmith tracing (requires LANGCHAIN_API_KEY)
+enable_langsmith = false
+
+# Log level: DEBUG, INFO, WARNING, ERROR
+log_level = "INFO"
+
+# =============================================================================
+# Cost Controls
+# =============================================================================
+
+[cost]
+# Hard budget cap in USD (build stops if exceeded)
+# budget_usd = 5.0
+
+# Warn when cost exceeds this threshold
+warn_threshold_usd = 1.0
+
+# =============================================================================
+# Profiles (activate with --profile <name>)
+# =============================================================================
+
+# Local development with Ollama
+[profile.local]
+[profile.local.llm.default]
+provider = "ollama"
+model = "qwen2.5-coder:7b"
+temperature = 0.0
+max_tokens = 2048
+
+# Quality build with Claude
+[profile.quality]
+[profile.quality.llm.default]
+provider = "anthropic"
+model = "claude-sonnet-4-5"
+temperature = 0.2
+max_tokens = 8192
+
+# Cheap build with GPT-4o-mini
+[profile.cheap]
+[profile.cheap.llm.default]
+provider = "openai"
+model = "gpt-4o-mini"
+temperature = 0.1
+max_tokens = 4096
