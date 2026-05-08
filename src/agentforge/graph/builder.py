@@ -18,10 +18,9 @@ from agentforge.agents import (
     qa_engineer_node,
 )
 from agentforge.config import AgentForgeConfig
+from agentforge.graph.parallel import route_to_devs, route_to_retry_devs
 from agentforge.graph.routing import (
-    route_after_architect,
     route_after_devops,
-    route_after_devs,
     route_after_pm,
     route_after_qa,
 )
@@ -29,75 +28,40 @@ from agentforge.graph.routing import (
 logger = logging.getLogger(__name__)
 
 
-async def _developers_node(state: dict[str, Any], config: AgentForgeConfig | None = None) -> dict[str, Any]:
-    """Combined developers node that runs frontend and backend in sequence.
+async def _dev_merge_node(state: dict[str, Any]) -> dict[str, Any]:
+    """Merge node that combines results from parallel developer executions.
 
-    In Phase 5, this will be replaced with parallel execution using Send API.
+    This node is called after the fan-in from frontend_dev and backend_dev.
+    LangGraph automatically collects results from parallel Send operations.
 
     Args:
-        state: Current graph state
-        config: Optional configuration
+        state: Current graph state (includes results from both devs)
 
     Returns:
-        Combined state update from both developers
+        State with merged developer results
     """
-    # Run frontend dev first
-    frontend_result = await frontend_dev_node(state, config)
-
-    # Merge frontend results into state for backend
-    merged_state = {**state, **frontend_result}
-
-    # Run backend dev
-    backend_result = await backend_dev_node(merged_state, config)
-
-    # Combine results
-    combined_code_files = {}
-    if "code_files" in frontend_result:
-        combined_code_files.update(frontend_result["code_files"])
-    if "code_files" in backend_result:
-        combined_code_files.update(backend_result["code_files"])
-
-    combined_events = []
-    if "events" in frontend_result:
-        combined_events.extend(frontend_result["events"])
-    if "events" in backend_result:
-        combined_events.extend(backend_result["events"])
-
-    combined_costs = []
-    if "costs" in frontend_result:
-        combined_costs.extend(frontend_result["costs"])
-    if "costs" in backend_result:
-        combined_costs.extend(backend_result["costs"])
-
-    # Check for errors
-    error = frontend_result.get("error") or backend_result.get("error")
-
-    result = {
-        "code_files": combined_code_files,
-        "events": combined_events,
-        "costs": combined_costs,
-    }
-
-    if error:
-        result["error"] = error
-
-    return result
+    # In LangGraph's Send API, parallel results are collected automatically
+    # The state already contains merged results from the reducer
+    # This node serves as a synchronization point after fan-in
+    logger.info("Developer merge node: synchronizing parallel results")
+    return {}
 
 
 def build_linear_graph(config: AgentForgeConfig | None = None) -> StateGraph:
-    """Build a linear agent graph with all nodes wired in sequence.
+    """Build agent graph with parallel developer execution.
 
     The graph follows this flow:
-    1. supervisor -> determines phase
-    2. product_manager -> generates PRD
-    3. architect -> generates architecture
-    4. developers (frontend + backend) -> generates code
+    1. product_manager -> generates PRD
+    2. architect -> generates architecture
+    3. frontend_dev + backend_dev (PARALLEL via Send API) -> generates code
+    4. dev_merge -> synchronization point after parallel execution
     5. qa_engineer -> runs tests
     6. devops_engineer -> generates DevOps configs
     7. END
 
     Conditional routing handles:
-    - Retrying development if tests fail
+    - Parallel fan-out to developers using Send API
+    - Targeted retry of specific developers based on QA feedback
     - Stopping on errors
 
     Args:
@@ -117,8 +81,14 @@ def build_linear_graph(config: AgentForgeConfig | None = None) -> StateGraph:
     async def arch_node(state: dict) -> dict:
         return await architect_node(state, config)
 
-    async def devs_node(state: dict) -> dict:
-        return await _developers_node(state, config)
+    async def fe_dev_node(state: dict) -> dict:
+        return await frontend_dev_node(state, config)
+
+    async def be_dev_node(state: dict) -> dict:
+        return await backend_dev_node(state, config)
+
+    async def dev_merge(state: dict) -> dict:
+        return await _dev_merge_node(state)
 
     async def qa_node(state: dict) -> dict:
         return await qa_engineer_node(state, config)
@@ -133,7 +103,9 @@ def build_linear_graph(config: AgentForgeConfig | None = None) -> StateGraph:
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("product_manager", pm_node)
     graph.add_node("architect", arch_node)
-    graph.add_node("developers", devs_node)
+    graph.add_node("frontend_dev", fe_dev_node)
+    graph.add_node("backend_dev", be_dev_node)
+    graph.add_node("dev_merge", dev_merge)
     graph.add_node("qa_engineer", qa_node)
     graph.add_node("devops_engineer", devops_node)
 
@@ -150,30 +122,52 @@ def build_linear_graph(config: AgentForgeConfig | None = None) -> StateGraph:
         },
     )
 
-    graph.add_conditional_edges(
-        "architect",
-        route_after_architect,
-        {
-            "developers": "developers",
-            "supervisor": "supervisor",
-        },
-    )
+    # Architect routes to parallel developers via Send API or supervisor on error
+    def route_architect_to_devs(state: dict):
+        """Route from architect to developers using Send for parallel execution."""
+        if state.get("error"):
+            return "supervisor"
+        # Return list of Send objects for parallel fan-out
+        return route_to_devs(state)
 
     graph.add_conditional_edges(
-        "developers",
-        route_after_devs,
+        "architect",
+        route_architect_to_devs,
+    )
+
+    # Both developers converge at dev_merge
+    graph.add_edge("frontend_dev", "dev_merge")
+    graph.add_edge("backend_dev", "dev_merge")
+
+    # After merge, check for errors and proceed to QA
+    def route_after_dev_merge(state: dict) -> str:
+        if state.get("error"):
+            return "supervisor"
+        return "qa_engineer"
+
+    graph.add_conditional_edges(
+        "dev_merge",
+        route_after_dev_merge,
         {
             "qa_engineer": "qa_engineer",
             "supervisor": "supervisor",
         },
     )
 
+    # QA can route to devops, retry devs (via Send), or supervisor
+    def route_qa_with_retry(state: dict):
+        """Route after QA with support for targeted developer retry."""
+        result = route_after_qa(state)
+        if result == "developers":
+            # Use Send API to retry specific developers
+            return route_to_retry_devs(state)
+        return result
+
     graph.add_conditional_edges(
         "qa_engineer",
-        route_after_qa,
+        route_qa_with_retry,
         {
             "devops_engineer": "devops_engineer",
-            "developers": "developers",
             "supervisor": "supervisor",
         },
     )
@@ -190,21 +184,45 @@ def build_linear_graph(config: AgentForgeConfig | None = None) -> StateGraph:
     # Supervisor routes back to the appropriate agent based on phase
     graph.add_edge("supervisor", END)  # For now, supervisor goes to end
 
-    logger.info("Built linear agent graph")
+    logger.info("Built agent graph with parallel developer execution")
 
     return graph
 
 
-def compile_graph(config: AgentForgeConfig | None = None) -> Any:
+def compile_graph(
+    config: AgentForgeConfig | None = None,
+    checkpointer: Any | None = None,
+    interrupt_before: list[str] | None = None,
+) -> Any:
     """Build and compile the agent graph.
 
     Args:
         config: Optional AgentForge configuration
+        checkpointer: Optional LangGraph checkpointer (e.g., SqliteSaver)
+            for state persistence. Required for interrupt support.
+        interrupt_before: Optional list of node names to interrupt before.
+            Used for interactive mode review gates. Requires checkpointer.
 
     Returns:
         Compiled graph ready for execution
     """
     graph = build_linear_graph(config)
-    compiled = graph.compile()
+
+    compile_kwargs: dict[str, Any] = {}
+
+    if checkpointer is not None:
+        compile_kwargs["checkpointer"] = checkpointer
+        logger.info("Compiling graph with checkpointer enabled")
+
+    if interrupt_before is not None:
+        if checkpointer is None:
+            logger.warning(
+                "interrupt_before specified but no checkpointer provided. "
+                "Interrupts require a checkpointer for state persistence."
+            )
+        compile_kwargs["interrupt_before"] = interrupt_before
+        logger.info(f"Compiling graph with interrupts before: {interrupt_before}")
+
+    compiled = graph.compile(**compile_kwargs)
     logger.info("Compiled agent graph")
     return compiled

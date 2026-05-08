@@ -1,7 +1,7 @@
 """AgentForge - Autonomous software development team built on LangGraph."""
 
 from agentforge.config import AgentForgeConfig, BuildResult, LLMConfig
-from agentforge.core import build, build_sync
+from agentforge.core import build, build_sync, resume_build, resume_build_sync
 from agentforge.state import (
     PRD,
     AgentRole,
@@ -28,4 +28,6 @@ __all__ = [
     "__version__",
     "build",
     "build_sync",
+    "resume_build",
+    "resume_build_sync",
 ]
