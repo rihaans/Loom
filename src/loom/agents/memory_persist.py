@@ -22,7 +22,7 @@ def _create_persist_event(run_id: str, success: bool) -> Event:
     return Event(
         timestamp=datetime.utcnow(),
         type=EventType.AGENT_END if success else EventType.ERROR,
-        phase=Phase.COMPLETE,
+        phase=Phase.DONE,
         payload={
             "run_id": run_id,
             "persisted": success,
@@ -121,7 +121,7 @@ async def memory_persist_node(
                 Event(
                     timestamp=datetime.utcnow(),
                     type=EventType.ERROR,
-                    phase=Phase.COMPLETE,
+                    phase=Phase.DONE,
                     payload={"error": f"Memory persistence failed: {e}"},
                 )
             ],
