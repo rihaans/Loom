@@ -1,4 +1,4 @@
-# TESTING_STRATEGY — How We Test AgentForge
+# TESTING_STRATEGY — How We Test Loom
 
 Testing an LLM-powered system has a fundamental tension: real LLM calls are expensive, slow, and non-deterministic. Mocked LLM calls miss real behavior. We solve this with **layered tests**.
 
@@ -114,7 +114,7 @@ Then patch the LLM factory:
 @pytest.fixture
 def patched_llm(fake_llm_full_pipeline, monkeypatch):
     monkeypatch.setattr(
-        "agentforge.llm.factory.get_llm_for_role",
+        "loom.llm.factory.get_llm_for_role",
         lambda role, config: fake_llm_full_pipeline,
     )
 ```
@@ -124,7 +124,7 @@ def patched_llm(fake_llm_full_pipeline, monkeypatch):
 ```python
 # tests/integration/test_graph_linear.py
 async def test_full_pipeline_happy_path(patched_llm, tmp_path):
-    config = AgentForgeConfig(output_dir=str(tmp_path), use_docker_sandbox=False)
+    config = LoomConfig(output_dir=str(tmp_path), use_docker_sandbox=False)
     result = await build("a todo app", config=config)
     
     assert result.phase == Phase.DONE
@@ -139,7 +139,7 @@ async def test_full_pipeline_happy_path(patched_llm, tmp_path):
 
 async def test_qa_retry_loop(patched_llm_with_failing_then_passing_qa, tmp_path):
     """First QA run fails → dev agents retry → second QA passes."""
-    config = AgentForgeConfig(output_dir=str(tmp_path), use_docker_sandbox=False)
+    config = LoomConfig(output_dir=str(tmp_path), use_docker_sandbox=False)
     result = await build("a todo app", config=config)
     
     assert result.retry_count == 1
@@ -162,7 +162,7 @@ async def test_parallel_dev_execution(patched_llm):
 
 async def test_interrupt_after_pm(patched_llm, tmp_path):
     """With interactive=True, graph interrupts after PM."""
-    config = AgentForgeConfig(interactive=True, output_dir=str(tmp_path))
+    config = LoomConfig(interactive=True, output_dir=str(tmp_path))
     graph = build_graph(config)
     
     initial = AgentState(description="todo app", interactive=True)
@@ -204,7 +204,7 @@ Real LLM calls. Marked `@pytest.mark.e2e`. Skipped unless `RUN_E2E=1`.
 @pytest.mark.parametrize("scenario", ["todo_app", "url_shortener", "csv_to_json"])
 async def test_demo_scenario(scenario):
     description = load_scenario(scenario)
-    config = AgentForgeConfig(
+    config = LoomConfig(
         llm_default=LLMConfig(provider="anthropic", model="claude-sonnet-4-5"),
     )
     result = await build(description, config=config)
@@ -260,7 +260,7 @@ jobs:
       - run: pip install ruff mypy
       - run: ruff check .
       - run: ruff format --check .
-      - run: mypy src/agentforge
+      - run: mypy src/loom
 
   test-unit-integration:
     runs-on: ubuntu-latest
@@ -268,14 +268,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
       - run: pip install -e ".[dev]"
-      - run: pytest tests/unit tests/integration -v --cov=agentforge
+      - run: pytest tests/unit tests/integration -v --cov=loom
 
   test-sandbox:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-      - run: docker build -f docker/sandbox.Dockerfile -t agentforge-sandbox:latest .
+      - run: docker build -f docker/sandbox.Dockerfile -t loom-sandbox:latest .
       - run: pip install -e ".[dev]"
       - run: pytest tests/integration/test_sandbox_real.py -v -m docker
 
@@ -307,13 +307,13 @@ jobs:
 
 Before each release:
 
-- [ ] `agentforge build "todo app"` succeeds with Anthropic
-- [ ] `agentforge build "todo app"` succeeds with OpenAI
-- [ ] `agentforge build "todo app"` succeeds with Ollama qwen2.5-coder:7b
-- [ ] `agentforge build "..." --interactive` pauses correctly
-- [ ] `agentforge ui` opens dashboard, build runs end-to-end
+- [ ] `loom build "todo app"` succeeds with Anthropic
+- [ ] `loom build "todo app"` succeeds with OpenAI
+- [ ] `loom build "todo app"` succeeds with Ollama qwen2.5-coder:7b
+- [ ] `loom build "..." --interactive` pauses correctly
+- [ ] `loom ui` opens dashboard, build runs end-to-end
 - [ ] Generated project has working `docker compose up`
 - [ ] Generated project's tests pass
 - [ ] Cached demo replays without API calls
-- [ ] `agentforge resume <thread_id>` works after Ctrl+C
+- [ ] `loom resume <thread_id>` works after Ctrl+C
 - [ ] Cost tracker matches actual API usage within 5%

@@ -1,8 +1,8 @@
-# PRD — AgentForge
+# PRD — Loom
 
 ## 1. Vision
 
-AgentForge is a LangGraph-orchestrated multi-agent system that takes a natural-language project description and autonomously produces a working, tested, containerized MVP. Six specialized AI agents collaborate as a real software team — each with a role, structured outputs, and tools — through a typed shared state.
+Loom is a LangGraph-orchestrated multi-agent system that takes a natural-language project description and autonomously produces a working, tested, containerized MVP. Six specialized AI agents collaborate as a real software team — each with a role, structured outputs, and tools — through a typed shared state.
 
 The output is **real, runnable code** — not a plan, not a sketch.
 
@@ -19,7 +19,7 @@ The output is **real, runnable code** — not a plan, not a sketch.
 ### Flow A — CLI Build (primary)
 
 ```
-$ agentforge build "REST API for a bookstore with CRUD, search, and reviews"
+$ loom build "REST API for a bookstore with CRUD, search, and reviews"
 
 ✓ Project Manager initialized
 → Product Manager: drafting PRD...      [████████████] PRD ready
@@ -39,7 +39,7 @@ $ agentforge build "REST API for a bookstore with CRUD, search, and reviews"
 ### Flow B — Interactive (phase gates)
 
 ```
-$ agentforge build "..." --interactive
+$ loom build "..." --interactive
 
 [after PM] PRD ready. Review and edit, or press Enter to continue.
 [after Architect] Stack: FastAPI + Postgres. Override? [y/N]
@@ -49,7 +49,7 @@ $ agentforge build "..." --interactive
 ### Flow C — Web Dashboard
 
 ```
-$ agentforge ui   # opens http://localhost:3000
+$ loom ui   # opens http://localhost:3000
 
 → Live graph visualization (nodes light up as they execute)
 → Streaming agent output in side panels
@@ -61,7 +61,7 @@ $ agentforge ui   # opens http://localhost:3000
 ### Flow D — Python SDK
 
 ```python
-from agentforge import build
+from loom import build
 
 result = await build(
     description="A CLI tool that converts CSV to JSON with schema validation",
@@ -86,7 +86,7 @@ print(result.files, result.test_report, result.cost)
 | F6 | Retry-on-failure loop | Failed tests → conditional edge back to dev agents (max 2 retries) |
 | F7 | File generation | Outputs are real files in `./output/<project-slug>/` |
 | F8 | Provider-agnostic LLM | Anthropic / OpenAI / Ollama swappable via config |
-| F9 | CLI interface | `agentforge build "..."` with rich/textual progress UI |
+| F9 | CLI interface | `loom build "..."` with rich/textual progress UI |
 | F10 | Multi-stack output | Agents pick stack per request (FastAPI, Express, Flask, React, static, CLI) |
 
 ### P1 — Should have

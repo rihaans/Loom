@@ -5,13 +5,13 @@ import json
 import pytest
 from langchain_core.messages import AIMessage
 
-from agentforge.agents.product_manager import (
+from loom.agents.product_manager import (
     MAX_PARSE_RETRIES,
     TokenTracker,
     product_manager_node,
 )
-from agentforge.state.enums import AgentRole, EventType, Phase
-from agentforge.state.models import PRD
+from loom.state.enums import AgentRole, EventType, Phase
+from loom.state.models import PRD
 
 # Sample valid PRD JSON that matches the schema
 VALID_PRD_JSON = json.dumps(
@@ -108,7 +108,7 @@ class TestProductManagerNode:
         """Test successful PRD generation with valid JSON response."""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from agentforge.config import AgentForgeConfig
+        from loom.config import LoomConfig
 
         # Create a mock chain that returns a valid PRD
         mock_prd = PRD(
@@ -137,14 +137,14 @@ class TestProductManagerNode:
         mock_parser.get_format_instructions = MagicMock(return_value="Format: JSON")
 
         with patch(
-            "agentforge.agents.product_manager.build_agent_chain",
+            "loom.agents.product_manager.build_agent_chain",
             return_value=(mock_chain, mock_parser),
         ):
             with patch(
-                "agentforge.agents.product_manager.get_llm_for_role",
+                "loom.agents.product_manager.get_llm_for_role",
                 return_value=MagicMock(),
             ):
-                config = AgentForgeConfig()
+                config = LoomConfig()
                 state = {"description": "Build me a todo app"}
 
                 result = await product_manager_node(state, config=config)
@@ -163,7 +163,7 @@ class TestProductManagerNode:
         """Test that parse errors trigger retry and eventually succeed."""
         from unittest.mock import MagicMock, patch
 
-        from agentforge.config import AgentForgeConfig
+        from loom.config import LoomConfig
 
         # Create a mock PRD for successful response
         mock_prd = PRD(
@@ -202,14 +202,14 @@ class TestProductManagerNode:
         mock_parser.get_format_instructions = MagicMock(return_value="Format: JSON")
 
         with patch(
-            "agentforge.agents.product_manager.build_agent_chain",
+            "loom.agents.product_manager.build_agent_chain",
             return_value=(mock_chain, mock_parser),
         ):
             with patch(
-                "agentforge.agents.product_manager.get_llm_for_role",
+                "loom.agents.product_manager.get_llm_for_role",
                 return_value=MagicMock(),
             ):
-                config = AgentForgeConfig()
+                config = LoomConfig()
                 state = {"description": "Build me a todo app"}
 
                 result = await product_manager_node(state, config=config)
@@ -224,7 +224,7 @@ class TestProductManagerNode:
         """Test that exceeding max retries returns an error."""
         from unittest.mock import MagicMock, patch
 
-        from agentforge.config import AgentForgeConfig
+        from loom.config import LoomConfig
 
         # Mock chain that always fails
         async def mock_invoke(*args, **kwargs):
@@ -237,14 +237,14 @@ class TestProductManagerNode:
         mock_parser.get_format_instructions = MagicMock(return_value="Format: JSON")
 
         with patch(
-            "agentforge.agents.product_manager.build_agent_chain",
+            "loom.agents.product_manager.build_agent_chain",
             return_value=(mock_chain, mock_parser),
         ):
             with patch(
-                "agentforge.agents.product_manager.get_llm_for_role",
+                "loom.agents.product_manager.get_llm_for_role",
                 return_value=MagicMock(),
             ):
-                config = AgentForgeConfig()
+                config = LoomConfig()
                 state = {"description": "Build me a todo app"}
 
                 result = await product_manager_node(state, config=config)
@@ -262,7 +262,7 @@ class TestProductManagerNode:
         """Test that events include correct agent information."""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from agentforge.config import AgentForgeConfig
+        from loom.config import LoomConfig
 
         mock_prd = PRD(
             project_name="Test Project",
@@ -290,14 +290,14 @@ class TestProductManagerNode:
         mock_parser.get_format_instructions = MagicMock(return_value="Format: JSON")
 
         with patch(
-            "agentforge.agents.product_manager.build_agent_chain",
+            "loom.agents.product_manager.build_agent_chain",
             return_value=(mock_chain, mock_parser),
         ):
             with patch(
-                "agentforge.agents.product_manager.get_llm_for_role",
+                "loom.agents.product_manager.get_llm_for_role",
                 return_value=MagicMock(),
             ):
-                config = AgentForgeConfig()
+                config = LoomConfig()
                 state = {"description": "Build me a test project"}
 
                 result = await product_manager_node(state, config=config)
@@ -313,7 +313,7 @@ class TestProductManagerPrompt:
 
     def test_system_prompt_exists(self) -> None:
         """Test that the system prompt is defined."""
-        from agentforge.agents.prompts import PRODUCT_MANAGER_SYSTEM_PROMPT
+        from loom.agents.prompts import PRODUCT_MANAGER_SYSTEM_PROMPT
 
         assert PRODUCT_MANAGER_SYSTEM_PROMPT
         assert "Product Manager" in PRODUCT_MANAGER_SYSTEM_PROMPT
@@ -321,7 +321,7 @@ class TestProductManagerPrompt:
 
     def test_human_template_exists(self) -> None:
         """Test that the human template is defined."""
-        from agentforge.agents.prompts import PRODUCT_MANAGER_HUMAN_TEMPLATE
+        from loom.agents.prompts import PRODUCT_MANAGER_HUMAN_TEMPLATE
 
         assert PRODUCT_MANAGER_HUMAN_TEMPLATE
         assert "{description}" in PRODUCT_MANAGER_HUMAN_TEMPLATE

@@ -1,12 +1,12 @@
 [project]
-name = "agentforge"
+name = "loom"
 version = "0.1.0"
 description = "Autonomous software development team built on LangGraph"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
-    {name = "AgentForge Team"}
+    {name = "Loom Team"}
 ]
 keywords = ["langchain", "langgraph", "agents", "llm", "ai", "code-generation"]
 classifiers = [
@@ -59,21 +59,26 @@ search = [
 tracing = [
     "langsmith>=0.1.0,<1.0.0",
 ]
+memory = [
+    "lancedb>=0.6.0,<1.0.0",
+    "sentence-transformers>=2.6.0,<3.0.0",
+    "pyarrow>=15.0.0,<16.0.0",
+]
 
 [project.scripts]
-agentforge = "agentforge.cli.app:app"
+loom = "loom.cli.app:app"
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/agentforge"
-Documentation = "https://github.com/YOUR_USERNAME/agentforge#readme"
-Repository = "https://github.com/YOUR_USERNAME/agentforge"
+Homepage = "https://github.com/YOUR_USERNAME/loom"
+Documentation = "https://github.com/YOUR_USERNAME/loom#readme"
+Repository = "https://github.com/YOUR_USERNAME/loom"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentforge"]
+packages = ["src/loom"]
 
 [tool.ruff]
 line-length = 100
@@ -96,7 +101,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["agentforge"]
+known-first-party = ["loom"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -126,7 +131,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src/agentforge"]
+source = ["src/loom"]
 branch = true
 
 [tool.coverage.report]

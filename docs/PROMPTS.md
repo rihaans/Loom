@@ -6,7 +6,7 @@ These prompts are designed to:
 3. Constrain the agent to its lane
 4. Be model-agnostic (work on Claude, GPT, and Llama)
 
-> Goes in `agentforge/agents/prompts/*.py` as Python string constants. Use `inspect.cleandoc()` to handle indentation cleanly.
+> Goes in `loom/agents/prompts/*.py` as Python string constants. Use `inspect.cleandoc()` to handle indentation cleanly.
 
 ---
 

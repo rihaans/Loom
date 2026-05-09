@@ -28,11 +28,11 @@ There are 8 phases. Estimated total: 3-6 weeks of focused work.
 
 ### Tasks
 - [ ] Initialize repo: `pyproject.toml`, `.gitignore`, `LICENSE`, `README.md`
-- [ ] Set up `src/agentforge/` package layout
+- [ ] Set up `src/loom/` package layout
 - [ ] Install dev dependencies (ruff, mypy, pytest)
 - [ ] Configure `ruff.toml`, `mypy.ini`, `pytest.ini`
 - [ ] Create empty modules matching `FILE_STRUCTURE.md`
-- [ ] Add a smoke test: `def test_imports(): import agentforge`
+- [ ] Add a smoke test: `def test_imports(): import loom`
 - [ ] Set up `.github/workflows/ci.yml` running lint + tests
 - [ ] Create `.env.example`
 
@@ -62,7 +62,7 @@ There are 8 phases. Estimated total: 3-6 weeks of focused work.
 ### Done when
 - All schemas in `DATA_MODELS.md` exist as Python classes
 - `pytest tests/unit/test_state.py` has ≥95% coverage
-- `mypy src/agentforge/state` passes
+- `mypy src/loom/state` passes
 
 **🛑 REVIEW GATE 1** — Confirm schemas before agents are built.
 
@@ -73,14 +73,14 @@ There are 8 phases. Estimated total: 3-6 weeks of focused work.
 **Duration:** 1-2 days
 
 ### Tasks
-- [ ] Implement `config/models.py` (AgentForgeConfig, LLMConfig)
+- [ ] Implement `config/models.py` (LoomConfig, LLMConfig)
 - [ ] Implement `config/loader.py` (CLI flags > env > toml > defaults)
 - [ ] Implement `config/defaults.py` with auto-detect logic
 - [ ] Implement `llm/factory.py` — `get_llm_for_role()`
 - [ ] Implement `llm/providers.py` — Anthropic, OpenAI, Ollama wrappers
 - [ ] Implement `llm/cost.py` with current price tables
 - [ ] Implement `llm/retry.py` — tenacity policies for rate limits, parse errors
-- [ ] Add `agentforge.example.toml` with all options documented
+- [ ] Add `loom.example.toml` with all options documented
 - [ ] Unit tests with mocked env vars
 
 ### Done when
@@ -173,7 +173,7 @@ Add the LangGraph features that make this project impressive.
 - [ ] Add `qa_feedback` propagation to dev agents
 - [ ] Implement `graph/checkpoint.py` with SqliteSaver
 - [ ] Add interrupts for `--interactive` mode (after PM, after Architect)
-- [ ] Add `agentforge resume <thread_id>` CLI command
+- [ ] Add `loom resume <thread_id>` CLI command
 - [ ] Optional: extract dev↔QA loop into a subgraph
 - [ ] Optional: implement LLM-supervisor variant
 - [ ] Integration tests: parallel execution, retry loop, interrupts, resume after crash
@@ -203,14 +203,14 @@ Make the QA agent actually run the tests in Docker.
 - [ ] Implement `tools/sandbox_exec.py` (LangChain @tool)
 - [ ] Update QA agent to use `sandbox_exec` tool instead of mocking
 - [ ] Implement test output parsers (pytest output → TestCase[], jest output → TestCase[])
-- [ ] Add `agentforge sandbox build/test/shell` CLI commands
+- [ ] Add `loom sandbox build/test/shell` CLI commands
 - [ ] Test sandbox isolation: network blocked, OOM kill, timeout
 - [ ] Run end-to-end: real LLM produces code, QA runs real tests in Docker
 - [ ] Iterate prompts until tests pass on first try ≥80% of the time
 
 ### Done when
-- `agentforge sandbox build` builds the image
-- `agentforge sandbox test` runs a hello-world successfully
+- `loom sandbox build` builds the image
+- `loom sandbox test` runs a hello-world successfully
 - A full build with real LLMs results in **passing tests** for the todo-app scenario
 - Network isolation verified by test
 
@@ -242,8 +242,8 @@ Make the experience delightful at the command line.
 - [ ] Polish error messages (especially Docker/Ollama not running)
 
 ### Done when
-- `agentforge --help` shows all commands clearly
-- `agentforge build "..."` shows a beautiful TUI
+- `loom --help` shows all commands clearly
+- `loom build "..."` shows a beautiful TUI
 - `--plain` works in pipes / CI
 - Cached demo plays back smoothly
 
@@ -272,12 +272,12 @@ The showcase piece for the Loom video.
 - [ ] Implement `useBuildWebSocket()` hook
 - [ ] Implement zustand store for build state
 - [ ] Style polish: dark mode, distinctive fonts, animations on active nodes
-- [ ] `agentforge ui` CLI command launches both backend and frontend dev servers
+- [ ] `loom ui` CLI command launches both backend and frontend dev servers
 - [ ] Build production assets, serve from FastAPI for one-process deploy
 - [ ] Take screenshots for the README
 
 ### Done when
-- `agentforge ui` opens browser with working dashboard
+- `loom ui` opens browser with working dashboard
 - Submitting a build streams events in real-time
 - Graph viz lights up nodes as they execute
 - All artifacts viewable

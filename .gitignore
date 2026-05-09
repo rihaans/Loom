@@ -80,14 +80,14 @@ frontend/build/
 
 # Output directories
 output/
-.agentforge/
+.loom/
 
 # Secrets and config (keep .example files)
 .env
 .env.local
 .env.*.local
-agentforge.toml
-!agentforge.example.toml
+loom.toml
+!loom.example.toml
 
 # Docker
 *.log

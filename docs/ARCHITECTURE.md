@@ -7,7 +7,7 @@
 │                          INTERFACE LAYER                                │
 │   ┌──────────────────┐   ┌─────────────────┐   ┌─────────────────────┐│
 │   │ CLI (rich+typer) │   │  Web Dashboard   │   │  Python SDK          ││
-│   │ textual UI       │   │  FastAPI + React │   │  agentforge.build() ││
+│   │ textual UI       │   │  FastAPI + React │   │  loom.build() ││
 │   └────────┬─────────┘   └────────┬─────────┘   └──────────┬──────────┘│
 └────────────┼─────────────────────────┼─────────────────────┼────────────┘
              └─────────────────────────┴─────────────────────┘
@@ -67,7 +67,7 @@
 ## 2. Request Lifecycle (CLI invocation)
 
 ```
-1. User → CLI:  agentforge build "..."
+1. User → CLI:  loom build "..."
 2. CLI parses → builds initial AgentState (description, config)
 3. CLI invokes graph.astream_events(state) for streaming
 4. LangGraph routes through supervisor:
@@ -186,7 +186,7 @@ SandboxRunner.run(files, command)
        --read-only --tmpfs /tmp \
        -v <tempdir>:/workspace:ro \
        -w /workspace \
-       agentforge-sandbox:python   # pre-built image with python+pytest+node
+       loom-sandbox:python   # pre-built image with python+pytest+node
        <command>
 4. Capture stdout, stderr, exit_code, duration
 5. Return ExecutionResult Pydantic model
@@ -215,11 +215,11 @@ The dashboard subscribes to LangGraph's `astream_events` and pushes them through
 ## 9. Configuration & Secrets
 
 ```
-agentforge/config.py loads (in priority order):
+loom/config.py loads (in priority order):
   1. CLI flags (--llm, --output-dir, etc.)
   2. Env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, OLLAMA_HOST, ...)
-  3. ~/.agentforge/config.toml (user defaults)
-  4. ./agentforge.toml (project defaults)
+  3. ~/.loom/config.toml (user defaults)
+  4. ./loom.toml (project defaults)
   5. Built-in defaults
 ```
 

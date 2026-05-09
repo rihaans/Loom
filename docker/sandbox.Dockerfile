@@ -1,8 +1,8 @@
-# AgentForge Sandbox Image
+# Loom Sandbox Image
 # Pre-built image with Python, Node.js, and common test runners
 #
-# Build: docker build -f docker/sandbox.Dockerfile -t agentforge-sandbox:latest .
-# Run:   docker run --rm -it agentforge-sandbox:latest
+# Build: docker build -f docker/sandbox.Dockerfile -t loom-sandbox:latest .
+# Run:   docker run --rm -it loom-sandbox:latest
 #
 # This image is used by the QA agent to run generated tests in isolation.
 # Security: runs as non-root, minimal attack surface, no network by default.
@@ -10,7 +10,7 @@
 FROM python:3.12-slim AS base
 
 # Metadata
-LABEL org.opencontainers.image.title="AgentForge Sandbox"
+LABEL org.opencontainers.image.title="Loom Sandbox"
 LABEL org.opencontainers.image.description="Isolated environment for running generated code and tests"
 LABEL org.opencontainers.image.version="1.0.0"
 

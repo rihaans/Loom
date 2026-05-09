@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agentforge.state import (
+from loom.state import (
     PRD,
     AgentRole,
     AgentState,
@@ -574,7 +574,7 @@ class TestLLMConfig:
 
     def test_default_config(self) -> None:
         """Test default LLM config."""
-        from agentforge.config import LLMConfig
+        from loom.config import LLMConfig
 
         config = LLMConfig()
         assert config.provider == "ollama"
@@ -583,7 +583,7 @@ class TestLLMConfig:
 
     def test_custom_config(self) -> None:
         """Test custom LLM config."""
-        from agentforge.config import LLMConfig
+        from loom.config import LLMConfig
 
         config = LLMConfig(
             provider="anthropic",
@@ -594,37 +594,37 @@ class TestLLMConfig:
 
     def test_invalid_temperature(self) -> None:
         """Test that invalid temperature is rejected."""
-        from agentforge.config import LLMConfig
+        from loom.config import LLMConfig
 
         with pytest.raises(ValidationError):
             LLMConfig(temperature=3.0)  # Max is 2.0
 
 
-class TestAgentForgeConfig:
-    """Test AgentForgeConfig model."""
+class TestLoomConfig:
+    """Test LoomConfig model."""
 
     def test_default_config(self) -> None:
-        """Test default AgentForge config."""
-        from agentforge.config import AgentForgeConfig
+        """Test default Loom config."""
+        from loom.config import LoomConfig
 
-        config = AgentForgeConfig()
+        config = LoomConfig()
         assert config.output_dir == "./output"
         assert config.max_retries == 2
         assert not config.interactive
 
     def test_get_llm_config_default(self) -> None:
         """Test getting default LLM config for a role."""
-        from agentforge.config import AgentForgeConfig
+        from loom.config import LoomConfig
 
-        config = AgentForgeConfig()
+        config = LoomConfig()
         llm_config = config.get_llm_config(AgentRole.PRODUCT_MANAGER)
         assert llm_config.model == "qwen2.5-coder:7b"
 
     def test_get_llm_config_override(self) -> None:
         """Test getting overridden LLM config for a role."""
-        from agentforge.config import AgentForgeConfig, LLMConfig
+        from loom.config import LoomConfig, LLMConfig
 
-        config = AgentForgeConfig(
+        config = LoomConfig(
             llm_overrides={
                 AgentRole.DEVOPS: LLMConfig(provider="anthropic", model="claude-haiku-3-5")
             }

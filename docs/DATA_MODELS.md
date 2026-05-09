@@ -2,7 +2,7 @@
 
 This is the **source of truth** for inter-agent contracts. Every field defined here is exactly what flows between nodes. If an agent's output doesn't match these schemas, the parser fails and the agent retries.
 
-> Goes in `agentforge/state/models.py`.
+> Goes in `loom/state/models.py`.
 
 ---
 
@@ -268,7 +268,7 @@ class LLMConfig(BaseModel):
     max_tokens: int = 4096
     api_key: str | None = None       # falls back to env
 
-class AgentForgeConfig(BaseModel):
+class LoomConfig(BaseModel):
     """Loaded from CLI flags + env + config file."""
     llm_default: LLMConfig
     llm_overrides: dict[AgentRole, LLMConfig] = {}

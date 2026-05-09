@@ -9,7 +9,7 @@ Two interfaces, one shared event stream from LangGraph.
 ### Layout
 
 ```
-┌─ AgentForge ─────────────────────────────────────────────────────────┐
+┌─ Loom ─────────────────────────────────────────────────────────┐
 │                                                                       │
 │  Building: "REST API for a bookstore with CRUD and search"           │
 │                                                                       │
@@ -55,7 +55,7 @@ Two interfaces, one shared event stream from LangGraph.
 Built on `textual`:
 
 ```python
-# agentforge/cli/tui.py
+# loom/cli/tui.py
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, ProgressBar
 from textual.containers import Vertical, Horizontal
@@ -85,7 +85,7 @@ class BuildTUI(App):
 
 ### Non-TUI fallback
 
-For CI / non-interactive shells, `agentforge build "..." --plain` produces simple log output:
+For CI / non-interactive shells, `loom build "..." --plain` produces simple log output:
 
 ```
 [14:32:01] PM started
@@ -119,7 +119,7 @@ For CI / non-interactive shells, `agentforge build "..." --plain` produces simpl
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  AgentForge                                       Cost: $0.18  ⚙️    │
+│  Loom                                       Cost: $0.18  ⚙️    │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                       │
 │  ┌─ Agent Graph ──────────────────────┐ ┌─ Active: Architect ─────┐ │
@@ -269,9 +269,9 @@ Settings persist to localStorage; backend uses session-scoped keys for security 
 Both CLI and web dashboard consume the same event stream from LangGraph:
 
 ```python
-# agentforge/observability/streaming.py
+# loom/observability/streaming.py
 async def stream_events(graph, initial_state, config):
-    """Convert raw astream_events into typed AgentForge events."""
+    """Convert raw astream_events into typed Loom events."""
     async for event in graph.astream_events(initial_state, config=config, version="v2"):
         kind = event["event"]
         if kind == "on_chain_start" and event["name"] in NODE_NAMES:
@@ -294,7 +294,7 @@ The CLI subscribes via async iteration. The dashboard publishes to its WebSocket
 For interview safety, `--cached <scenario>` replays a pre-recorded successful run:
 
 ```bash
-agentforge build "..." --cached todo_app
+loom build "..." --cached todo_app
 # Plays back events at realistic speed without making any API calls
 ```
 

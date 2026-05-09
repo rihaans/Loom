@@ -50,7 +50,7 @@ CMD ["bash"]
 
 Build once:
 ```bash
-docker build -f docker/sandbox.Dockerfile -t agentforge-sandbox:latest .
+docker build -f docker/sandbox.Dockerfile -t loom-sandbox:latest .
 ```
 
 The image is ~800 MB but provides instant startup for most generated projects.
@@ -58,15 +58,15 @@ The image is ~800 MB but provides instant startup for most generated projects.
 ## 3. SandboxRunner
 
 ```python
-# agentforge/sandbox/runner.py
+# loom/sandbox/runner.py
 import docker
 import tempfile
 import time
 from pathlib import Path
-from agentforge.state.models import ExecutionResult
+from loom.state.models import ExecutionResult
 
 class SandboxRunner:
-    IMAGE = "agentforge-sandbox:latest"
+    IMAGE = "loom-sandbox:latest"
 
     def __init__(
         self,
@@ -83,7 +83,7 @@ class SandboxRunner:
 
     def run(self, files: dict[str, str], command: str) -> ExecutionResult:
         """Materialize files, run command, return result."""
-        with tempfile.TemporaryDirectory(prefix="agentforge-sb-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="loom-sb-") as tmpdir:
             tmp = Path(tmpdir)
             for path, content in files.items():
                 full = tmp / path
@@ -141,7 +141,7 @@ class SandboxRunner:
         except docker.errors.ImageNotFound:
             raise RuntimeError(
                 f"Sandbox image {self.IMAGE} not found. "
-                f"Run: agentforge sandbox build"
+                f"Run: loom sandbox build"
             )
         except docker.errors.APIError as e:
             raise RuntimeError(f"Docker error: {e}")
@@ -150,10 +150,10 @@ class SandboxRunner:
 ## 4. The `sandbox_exec` Tool (LangChain)
 
 ```python
-# agentforge/tools/sandbox_exec.py
+# loom/tools/sandbox_exec.py
 from langchain_core.tools import tool
-from agentforge.sandbox.runner import SandboxRunner
-from agentforge.state.models import ExecutionResult
+from loom.sandbox.runner import SandboxRunner
+from loom.state.models import ExecutionResult
 
 _runner: SandboxRunner | None = None
 
@@ -182,7 +182,7 @@ def sandbox_exec(
 
 ## 5. Subprocess Fallback (Dev Mode)
 
-For dev iteration when Docker startup overhead is annoying, AgentForge supports a subprocess-based runner gated behind `AGENTFORGE_UNSAFE_SANDBOX=1`:
+For dev iteration when Docker startup overhead is annoying, Loom supports a subprocess-based runner gated behind `LOOM_UNSAFE_SANDBOX=1`:
 
 ```python
 class SubprocessRunner:
@@ -221,15 +221,15 @@ class SubprocessRunner:
 Selected via factory:
 
 ```python
-def get_sandbox(config: AgentForgeConfig) -> SandboxRunner | SubprocessRunner:
+def get_sandbox(config: LoomConfig) -> SandboxRunner | SubprocessRunner:
     if config.use_docker_sandbox:
         return SandboxRunner(
             timeout_seconds=config.sandbox_timeout_seconds,
             memory_mb=config.sandbox_memory_mb,
         )
-    if not os.getenv("AGENTFORGE_UNSAFE_SANDBOX"):
+    if not os.getenv("LOOM_UNSAFE_SANDBOX"):
         raise RuntimeError(
-            "Subprocess sandbox requires AGENTFORGE_UNSAFE_SANDBOX=1. "
+            "Subprocess sandbox requires LOOM_UNSAFE_SANDBOX=1. "
             "Use Docker for safety, or accept the risk explicitly."
         )
     return SubprocessRunner(timeout_seconds=config.sandbox_timeout_seconds)
@@ -239,14 +239,14 @@ def get_sandbox(config: AgentForgeConfig) -> SandboxRunner | SubprocessRunner:
 
 ```bash
 # Build the sandbox image
-agentforge sandbox build
+loom sandbox build
 
 # Test it
-agentforge sandbox test
+loom sandbox test
 # → runs `python -c "print('hello')"` in the sandbox
 
 # Inspect it
-agentforge sandbox shell
+loom sandbox shell
 # → drops you into a shell in a fresh sandbox container
 ```
 
@@ -254,7 +254,7 @@ agentforge sandbox shell
 
 | Failure | Handling |
 |---|---|
-| Image not found | Clear error → tell user to run `agentforge sandbox build` |
+| Image not found | Clear error → tell user to run `loom sandbox build` |
 | Docker daemon not running | Clear error → suggest starting Docker Desktop |
 | Permission denied on Linux (no docker group) | Clear error → suggest `sudo usermod -aG docker $USER` |
 | Image build fails (no internet) | Cache pre-built image as a release artifact in GitHub |

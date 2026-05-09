@@ -1,6 +1,6 @@
 # MODEL_SELECTION — Which LLM for Which Agent
 
-A core feature of AgentForge is **provider-agnostic, per-agent LLM configuration**. Each agent has different requirements: PM needs reasoning, devs need code skill, DevOps needs neither.
+A core feature of Loom is **provider-agnostic, per-agent LLM configuration**. Each agent has different requirements: PM needs reasoning, devs need code skill, DevOps needs neither.
 
 ---
 
@@ -76,7 +76,7 @@ export DEEPSEEK_API_KEY="..."
 ## Per-Agent LLM Configuration
 
 ```toml
-# In ~/.agentforge/config.toml or agentforge.toml in project root
+# In ~/.loom/config.toml or loom.toml in project root
 
 [llm.default]
 provider = "anthropic"
@@ -96,14 +96,14 @@ temperature = 0.3   # slight creativity for PRD writing
 Or via environment:
 
 ```bash
-export AGENTFORGE_LLM_DEFAULT="anthropic:claude-sonnet-4-5"
-export AGENTFORGE_LLM_DEVOPS="anthropic:claude-haiku-3-5"
+export LOOM_LLM_DEFAULT="anthropic:claude-sonnet-4-5"
+export LOOM_LLM_DEVOPS="anthropic:claude-haiku-3-5"
 ```
 
 Or via CLI flags:
 
 ```bash
-agentforge build "..." \
+loom build "..." \
   --llm anthropic:claude-sonnet-4-5 \
   --llm-devops anthropic:claude-haiku-3-5
 ```
@@ -162,8 +162,8 @@ Quality
 ## Implementation: The LLM Factory
 
 ```python
-# agentforge/llm/factory.py
-def get_llm_for_role(role: AgentRole, config: AgentForgeConfig) -> BaseChatModel:
+# loom/llm/factory.py
+def get_llm_for_role(role: AgentRole, config: LoomConfig) -> BaseChatModel:
     """Returns a configured LLM for an agent role, falling back through:
     1. Per-role override
     2. Default config
@@ -218,7 +218,7 @@ When using Ollama models < 30B params:
 - Hallucinated APIs → constrain stack choices more aggressively
 - Slow responses → reduce `max_tokens`, batch size
 
-The `agentforge.toml` ships with a `[profile.local]` preset:
+The `loom.toml` ships with a `[profile.local]` preset:
 
 ```toml
 [profile.local]
@@ -234,4 +234,4 @@ prompt_variant = "concise"
 max_parse_attempts = 5
 ```
 
-Activate with: `agentforge build "..." --profile local`
+Activate with: `loom build "..." --profile local`

@@ -149,13 +149,13 @@ boards are accessed via shareable URLs containing a UUID.
 For the Loom video and live demos, every scenario has a `cached_runs/<scenario>.jsonl` file produced by:
 
 ```bash
-agentforge build "$(cat examples/01_todo_app.md)" --record-run > cached_runs/todo_app.jsonl
+loom build "$(cat examples/01_todo_app.md)" --record-run > cached_runs/todo_app.jsonl
 ```
 
 The cached run is a JSONL of all events with their original timestamps. Replay:
 
 ```bash
-agentforge demo todo_app
+loom demo todo_app
 # Plays back at original speed, no API calls, no Docker — just visual
 ```
 
@@ -169,8 +169,8 @@ Suggested 3-minute structure:
 
 | Time | Content |
 |---|---|
-| 0:00-0:20 | "AgentForge — six AI agents that build software. Watch this." |
-| 0:20-0:30 | Show CLI: `agentforge build "todo app with auth"` |
+| 0:00-0:20 | "Loom — six AI agents that build software. Watch this." |
+| 0:20-0:30 | Show CLI: `loom build "todo app with auth"` |
 | 0:30-0:50 | Show TUI lighting up — PM, Architect, parallel devs, QA, DevOps |
 | 0:50-1:10 | Switch to web dashboard mid-build, show graph + streaming output |
 | 1:10-1:30 | Show generated `output/todo-app/` directory |

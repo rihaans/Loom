@@ -1,4 +1,4 @@
-# AgentForge — Autonomous Software Development Team
+# Loom — Autonomous Software Development Team
 
 > A multi-agent system built with **LangChain + LangGraph** that simulates a full software development team. Give it a project description → it produces a working, tested, containerized MVP.
 
@@ -42,7 +42,7 @@ You are implementing this project. The documentation in this repo is your **sing
 ## What the System Does (User-Facing)
 
 ```
-$ agentforge build "A Flask API for a personal expense tracker with categories,
+$ loom build "A Flask API for a personal expense tracker with categories,
                     monthly summaries, and CSV export"
 
 [12:04:31] 🎯 Project Manager: Starting build pipeline
@@ -74,8 +74,8 @@ The user can then `cd output/expense-tracker && docker-compose up` and the app r
 ## Quick Start (when implemented)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/agentforge
-cd agentforge
+git clone https://github.com/YOUR_USERNAME/loom
+cd loom
 pip install -e ".[dev]"
 
 # Free path: install Ollama, pull a model
@@ -84,7 +84,7 @@ ollama pull qwen2.5-coder:7b
 # Or use Claude/GPT
 export ANTHROPIC_API_KEY="sk-..."
 
-agentforge build "your project idea here"
+loom build "your project idea here"
 ```
 
 ## Status

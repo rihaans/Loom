@@ -1,6 +1,6 @@
 # GRAPH_DESIGN — The LangGraph State Machine
 
-This is the heart of AgentForge. The system is one `StateGraph[AgentState]` with conditional routing, parallel fan-out, and a self-correcting subgraph.
+This is the heart of Loom. The system is one `StateGraph[AgentState]` with conditional routing, parallel fan-out, and a self-correcting subgraph.
 
 ---
 
@@ -230,11 +230,11 @@ LangGraph's `SqliteSaver` persists state after every node:
 ```python
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-checkpointer = SqliteSaver.from_conn_string(".agentforge/checkpoints.db")
+checkpointer = SqliteSaver.from_conn_string(".loom/checkpoints.db")
 graph = builder.compile(checkpointer=checkpointer)
 ```
 
-Every run gets a unique `thread_id` (UUID). `agentforge resume <thread_id>` picks up where it left off. Enables time-travel debugging too — replay from any saved node.
+Every run gets a unique `thread_id` (UUID). `loom resume <thread_id>` picks up where it left off. Enables time-travel debugging too — replay from any saved node.
 
 ## 10. Streaming
 

@@ -28,16 +28,16 @@
 - [x] Add `LICENSE` (MIT)
 - [x] Stub `README.md` with project pitch + install instructions
   - *Note: docs moved to `docs/` folder per FILE_STRUCTURE.md*
-- [x] Set up `src/agentforge/` package layout with empty `__init__.py` files
+- [x] Set up `src/loom/` package layout with empty `__init__.py` files
 - [x] Install dev deps: `pip install -e ".[dev]"`
 - [x] Configure `.ruff.toml` and `mypy.ini`
   - *Note: all config consolidated in `pyproject.toml`*
 - [x] Create `pytest.ini` / `pyproject.toml [tool.pytest]` config
-- [x] Add smoke test: `tests/unit/test_imports.py` with `def test_imports(): import agentforge`
+- [x] Add smoke test: `tests/unit/test_imports.py` with `def test_imports(): import loom`
   - *8 smoke tests added covering all main modules*
 - [x] Set up `.github/workflows/ci.yml` (lint + test)
 - [x] Add `.env.example` with all expected env vars
-- [x] Add `agentforge.example.toml` with all config options
+- [x] Add `loom.example.toml` with all config options
 - [x] Add `docker/sandbox.Dockerfile` placeholder
 - [ ] Verify CI is green on initial push
   - *Pending: requires git push to GitHub*
@@ -52,12 +52,12 @@
 **Review gate:** Required before Phase 2
 **Reference:** `DATA_MODELS.md`
 
-- [x] Create `src/agentforge/state/enums.py` with `Phase`, `AgentRole`, `Priority`, `ProjectType`
+- [x] Create `src/loom/state/enums.py` with `Phase`, `AgentRole`, `Priority`, `ProjectType`
   - *Also added: EventType, TechLayer, ComponentType, ComponentLocation, HttpMethod, TargetAgent*
   - *Using StrEnum (Python 3.11+) per ruff UP042 recommendation*
-- [x] Create `src/agentforge/state/reducers.py` with `merge_dicts()` and other reducers
+- [x] Create `src/loom/state/reducers.py` with `merge_dicts()` and other reducers
   - *Implemented: merge_dicts, last_value, increment, append_list, coalesce*
-- [x] Create `src/agentforge/state/models.py`:
+- [x] Create `src/loom/state/models.py`:
   - [x] `UserStory`, `DataEntity`, `PRD`
   - [x] `TechChoice`, `APIEndpoint`, `Component`, `ArchitectureDoc`
   - [x] `CodeFile`, `FileBundle`
@@ -67,14 +67,14 @@
   - [x] `ExecutionResult`
   - [x] `AgentState` (with all `Annotated[..., reducer]` fields)
 - [x] Add `field_validator`s for path safety (no `..`, no leading `/`), slug regex, ID format
-- [x] Create `src/agentforge/config/models.py` with `LLMConfig`, `AgentForgeConfig`
+- [x] Create `src/loom/config/models.py` with `LLMConfig`, `LoomConfig`
   - *Also added BuildResult model*
 - [x] Write `tests/unit/test_state.py`:
   - [x] Each model: valid case + invalid case
   - [x] Reducers: empty + single + merge + idempotence
   - [x] AgentState round-trip via `model_dump()` / `model_validate()`
   - *62 tests total covering all models and reducers*
-- [x] Run `mypy src/agentforge/state` — must pass ✓
+- [x] Run `mypy src/loom/state` — must pass ✓
 - [x] Confirm coverage ≥95% on `state/` module
   - *Achieved: 99% coverage on state module*
 
@@ -88,18 +88,18 @@
 **Review gate:** Required before Phase 3
 **Reference:** `MODEL_SELECTION.md`
 
-- [x] `src/agentforge/config/loader.py` — priority chain (CLI > env > toml > defaults)
-- [x] `src/agentforge/config/defaults.py` — auto-detection logic
-- [x] `src/agentforge/llm/factory.py` — `get_llm_for_role(role, config)`
-- [x] `src/agentforge/llm/providers.py` — Anthropic, OpenAI, Ollama wrappers
-- [x] `src/agentforge/llm/cost.py` — price tables + token → USD
+- [x] `src/loom/config/loader.py` — priority chain (CLI > env > toml > defaults)
+- [x] `src/loom/config/defaults.py` — auto-detection logic
+- [x] `src/loom/llm/factory.py` — `get_llm_for_role(role, config)`
+- [x] `src/loom/llm/providers.py` — Anthropic, OpenAI, Ollama wrappers
+- [x] `src/loom/llm/cost.py` — price tables + token → USD
   - *Anthropic: claude-opus-4-5, claude-sonnet-4-5, claude-haiku-3-5 + legacy models*
   - *OpenAI: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, o1-mini, o1-preview*
-- [x] `src/agentforge/llm/retry.py` — tenacity policies (rate limit, parse error)
+- [x] `src/loom/llm/retry.py` — tenacity policies (rate limit, parse error)
   - *ParseError, RateLimitError, MaxRetriesExceededError exception types*
   - *is_rate_limit_error() and is_transient_error() detection*
   - *retry_llm_call() async wrapper with configurable attempts*
-- [x] `agentforge.example.toml` at repo root with all options documented
+- [x] `loom.example.toml` at repo root with all options documented
 - [x] Unit tests with monkeypatched env vars
   - *30 tests covering config, providers, cost, retry logic*
 - [ ] Manual verification: `.invoke("hello")` works against each available provider
@@ -116,11 +116,11 @@
 **Review gate:** 🔥 CRITICAL — do not proceed without explicit user approval
 **Reference:** `AGENTS.md` § Product Manager, `PROMPTS.md` § Product Manager
 
-- [x] `src/agentforge/agents/prompts/product_manager.py` — system prompt as constant
+- [x] `src/loom/agents/prompts/product_manager.py` — system prompt as constant
   - *PRODUCT_MANAGER_SYSTEM_PROMPT and PRODUCT_MANAGER_HUMAN_TEMPLATE defined*
-- [x] `src/agentforge/agents/base.py` — `build_agent()` factory (prompt → llm → parser)
+- [x] `src/loom/agents/base.py` — `build_agent()` factory (prompt → llm → parser)
   - *build_agent_chain(), get_format_instructions(), create_agent_for_role() implemented*
-- [x] `src/agentforge/agents/product_manager.py`:
+- [x] `src/loom/agents/product_manager.py`:
   - [x] Node function signature: `async def product_manager_node(state) -> dict`
   - [x] Structured output via `PydanticOutputParser(PRD)`
   - [x] Parse-error retry (max 3) with error fed into next prompt
@@ -202,9 +202,9 @@
 - [x] Add `interrupt_before=["architect", "frontend_dev", "qa_engineer", "devops_engineer"]` when `interactive=True`
   - *INTERACTIVE_REVIEW_GATES list in core.py*
   - *compile_graph() accepts checkpointer and interrupt_before params*
-- [x] CLI: `agentforge resume <thread_id>` reads checkpoint, continues
+- [x] CLI: `loom resume <thread_id>` reads checkpoint, continues
   - *resume_build() and resume_build_sync() in core.py*
-  - *Exported from agentforge package*
+  - *Exported from loom package*
 - [ ] Optional: extract dev↔QA into a subgraph (`graph/subgraphs/dev_qa.py`)
 - [ ] Optional: implement LLM-supervisor variant gated by `--llm-supervisor` flag
 - [ ] Integration tests:
@@ -231,13 +231,13 @@
   - *Python 3.12, Node.js 20 LTS, pytest, jest, vitest, TypeScript*
   - *Pre-installed common deps: FastAPI, Flask, Express, React, Vite, SQLAlchemy*
   - *Non-root user, health check, security labels*
-- [x] Build image: `docker build -f docker/sandbox.Dockerfile -t agentforge-sandbox:latest .`
+- [x] Build image: `docker build -f docker/sandbox.Dockerfile -t loom-sandbox:latest .`
 - [x] `sandbox/runner.py` — `SandboxRunner` (Docker SDK)
   - [x] Resource limits: memory, cpus, pids, no-new-privileges, cap_drop=ALL
   - [x] Network isolation by default
   - [x] Timeout enforcement
   - [x] stdout/stderr capture with truncation
-- [x] `sandbox/subprocess_runner.py` — fallback gated by `AGENTFORGE_UNSAFE_SANDBOX=1`
+- [x] `sandbox/subprocess_runner.py` — fallback gated by `LOOM_UNSAFE_SANDBOX=1`
 - [x] `sandbox/factory.py` — selection logic (Docker preferred, subprocess fallback)
 - [x] `sandbox/models.py` — SandboxResult, SandboxConfig, TestRunConfig, ExecutionStatus
 - [x] `sandbox/parsers.py` — pytest/jest/vitest output → TestReport
@@ -246,7 +246,7 @@
   - *Falls back to stub if sandbox unavailable*
   - *Auto-detects test framework from files*
   - *Creates QAFeedback with targeted agent for failures*
-- [ ] CLI: `agentforge sandbox build/test/shell`
+- [ ] CLI: `loom sandbox build/test/shell`
 - [ ] Sandbox isolation tests:
   - [ ] `test_sandbox_runs_python()` — happy path
   - [ ] `test_sandbox_blocks_network_by_default()`
@@ -277,7 +277,7 @@
 - [x] `config show/init` commands
 - [x] `observability/streaming.py` — convert `astream_events` → typed events
   - *StreamEvent, StreamEventType, BuildObserver classes*
-  - *Parses LangGraph events to typed AgentForge events*
+  - *Parses LangGraph events to typed Loom events*
 - [x] `cli/tui.py` — Textual app:
   - [x] `PipelineView` — agent statuses with icons (○/●/✓/✗)
   - [x] `LiveOutput` — token streaming for active agent
@@ -288,7 +288,7 @@
 - [ ] `--interactive` flow: pause at gates, accept user input via `prompt_toolkit`
 - [ ] `--cached <scenario>` demo replay using `examples/cached_runs/*.jsonl`
 - [ ] Polish error messages: Docker not running, Ollama not reachable, missing API key
-- [x] Smoke test: `agentforge --help` and every command shows help correctly
+- [x] Smoke test: `loom --help` and every command shows help correctly
 
 **Phase 7 done:** ✅ pending review
 
@@ -334,7 +334,7 @@
 
 ### Integration
 
-- [x] `agentforge ui` CLI command launches FastAPI + serves built React assets
+- [x] `loom ui` CLI command launches FastAPI + serves built React assets
   - *--port, --host, --dev options*
 - [x] Production build: `cd frontend && npm run build` → served from FastAPI
 - [ ] Screenshots in `docs/images/` for the README
@@ -350,7 +350,7 @@
 **Phase 8 done:** ✅ pending FINAL review
 
 > _Notes for the user at this gate:_
-> _Web dashboard complete! FastAPI backend with build management, WebSocket streaming, artifact retrieval. React frontend with xyflow graph visualization, real-time event log, artifact panels. CLI `agentforge ui` command serves the dashboard. Demo recording and final polish remaining._
+> _Web dashboard complete! FastAPI backend with build management, WebSocket streaming, artifact retrieval. React frontend with xyflow graph visualization, real-time event log, artifact panels. CLI `loom ui` command serves the dashboard. Demo recording and final polish remaining._
 
 ---
 
@@ -370,7 +370,7 @@ These get touched throughout, not in any one phase. Update as relevant.
 
 _Use this space for anything that doesn't fit a phase task. Date-stamp entries._
 
-> _2026-05-04 — Phase 0 complete. All 16 docs reorganized into `docs/` folder per FILE_STRUCTURE.md. Full package structure created with all `__init__.py` files. All linting (ruff), type checking (mypy), and smoke tests (pytest) passing. CLI stub functional with `agentforge version` and `agentforge build` commands._
+> _2026-05-04 — Phase 0 complete. All 16 docs reorganized into `docs/` folder per FILE_STRUCTURE.md. Full package structure created with all `__init__.py` files. All linting (ruff), type checking (mypy), and smoke tests (pytest) passing. CLI stub functional with `loom version` and `loom build` commands._
 
 > _2026-05-05 — Phase 1 complete. All Pydantic models implemented per DATA_MODELS.md. Using StrEnum for all enums (cleaner than str+Enum). 62 unit tests with 99% coverage on state module. All validators in place for path safety, slug format, ID format. AgentState has properly typed Annotated fields with reducers for merge_dicts and append_list._
 
@@ -382,15 +382,15 @@ _Use this space for anything that doesn't fit a phase task. Date-stamp entries._
 
 > _2026-05-06 — Phase 5 complete. Parallel execution via LangGraph Send API implemented. Frontend and backend devs now execute concurrently with dev_merge sync point. Checkpointing with SqliteSaver enables pause/resume functionality. Interactive mode uses interrupt_before for review gates. resume_build() function allows continuing interrupted builds. Graph exports expanded to include parallel and checkpoint utilities. 100 tests still passing._
 
-> _2026-05-07 — Phase 6 complete. Docker sandbox infrastructure implemented. SandboxRunner with Docker SDK provides isolated code execution with resource limits (memory, CPU, PIDs), network isolation, and timeout enforcement. SubprocessRunner fallback for dev environments without Docker (requires AGENTFORGE_UNSAFE_SANDBOX=1). Test output parsers for pytest/jest/vitest with JSON and text format support. QA engineer updated to use real sandbox with automatic test framework detection. 100 tests still passing._
+> _2026-05-07 — Phase 6 complete. Docker sandbox infrastructure implemented. SandboxRunner with Docker SDK provides isolated code execution with resource limits (memory, CPU, PIDs), network isolation, and timeout enforcement. SubprocessRunner fallback for dev environments without Docker (requires LOOM_UNSAFE_SANDBOX=1). Test output parsers for pytest/jest/vitest with JSON and text format support. QA engineer updated to use real sandbox with automatic test framework detection. 100 tests still passing._
 
 > _2026-05-07 — Phase 7 complete. Full CLI implemented with Typer: build, resume, sandbox, config commands. Observability/streaming layer parses LangGraph astream_events to typed StreamEvents. Textual TUI with PipelineView (agent status icons), LiveOutput (token streaming), StatsPanel (tokens/cost/time), and EventLog (event timeline). Key bindings for toggling panels. Plain mode for CI environments. 100 tests still passing._
 
-> _2026-05-07 — Phase 8 complete. Web dashboard implemented! FastAPI backend with build/runs/artifacts REST API and WebSocket streaming. React frontend with Vite+TypeScript+Tailwind: Home page with build form and examples, Build page with xyflow graph visualization, real-time event log, artifact panels for PRD/architecture/code/tests/devops. Zustand store for state management. CLI `agentforge ui` command serves the dashboard. 100 tests still passing._
+> _2026-05-07 — Phase 8 complete. Web dashboard implemented! FastAPI backend with build/runs/artifacts REST API and WebSocket streaming. React frontend with Vite+TypeScript+Tailwind: Home page with build form and examples, Build page with xyflow graph visualization, real-time event log, artifact panels for PRD/architecture/code/tests/devops. Zustand store for state management. CLI `loom ui` command serves the dashboard. 100 tests still passing._
 
 > _2026-05-08 — End-to-end testing and bug fixes. Fixed 8 issues discovered during integration testing:_
 > _1. `config.default_llm` → `config.llm_default` (attribute name mismatch in CLI and server)_
-> _2. `parse_llm_string` import fixed (was from wrong module `agentforge.llm`, correct is `agentforge.config`)_
+> _2. `parse_llm_string` import fixed (was from wrong module `loom.llm`, correct is `loom.config`)_
 > _3. `parse_llm_string` returns `LLMConfig` object, not tuple (fixed destructuring)_
 > _4. Async checkpointer fixed - `SqliteSaver.from_conn_string()` is a context manager_
 > _5. Switched from `AsyncSqliteSaver` to `MemorySaver` for async compatibility (aiosqlite version issue)_
@@ -399,8 +399,8 @@ _Use this space for anything that doesn't fit a phase task. Date-stamp entries._
 > _8. Changed Rich spinner to "line" on Windows to avoid cp1252 encoding errors_
 >
 > _New CLI features added:_
-> _- `agentforge doctor` — diagnoses setup, checks API keys, Ollama, Docker availability_
-> _- `agentforge estimate "description"` — estimates build cost without running_
+> _- `loom doctor` — diagnoses setup, checks API keys, Ollama, Docker availability_
+> _- `loom estimate "description"` — estimates build cost without running_
 >
 > _All 100 tests still passing. System end-to-end tested successfully with Ollama (model capability was the only failure - infrastructure works)._
 

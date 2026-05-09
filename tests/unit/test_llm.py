@@ -4,14 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentforge.config import (
-    AgentForgeConfig,
+from loom.config import (
+    LoomConfig,
     LLMConfig,
     auto_detect_default,
     load_config,
     parse_llm_string,
 )
-from agentforge.llm import (
+from loom.llm import (
     MaxRetriesExceededError,
     ParseError,
     calculate_cost,
@@ -21,7 +21,7 @@ from agentforge.llm import (
     get_llm_for_role,
     get_pricing,
 )
-from agentforge.state.enums import AgentRole
+from loom.state.enums import AgentRole
 
 
 class TestAutoDetect:
@@ -91,16 +91,16 @@ class TestLoadConfig:
         """Test loading default config without any overrides."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("AGENTFORGE_LLM_DEFAULT", raising=False)
+        monkeypatch.delenv("LOOM_LLM_DEFAULT", raising=False)
 
         config = load_config(auto_detect_llm=False)
         assert config.llm_default.provider == "ollama"
 
     def test_load_with_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that environment variables override defaults."""
-        monkeypatch.setenv("AGENTFORGE_LLM_DEFAULT", "openai:gpt-4o-mini")
-        monkeypatch.setenv("AGENTFORGE_OUTPUT_DIR", "/custom/output")
-        monkeypatch.setenv("AGENTFORGE_MAX_RETRIES", "5")
+        monkeypatch.setenv("LOOM_LLM_DEFAULT", "openai:gpt-4o-mini")
+        monkeypatch.setenv("LOOM_OUTPUT_DIR", "/custom/output")
+        monkeypatch.setenv("LOOM_MAX_RETRIES", "5")
 
         config = load_config(auto_detect_llm=False)
         assert config.llm_default.provider == "openai"
@@ -110,7 +110,7 @@ class TestLoadConfig:
 
     def test_load_with_cli_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that CLI overrides take highest priority."""
-        monkeypatch.setenv("AGENTFORGE_OUTPUT_DIR", "/env/output")
+        monkeypatch.setenv("LOOM_OUTPUT_DIR", "/env/output")
 
         cli_overrides = {"output_dir": "/cli/output"}
         config = load_config(cli_overrides=cli_overrides, auto_detect_llm=False)
@@ -119,7 +119,7 @@ class TestLoadConfig:
 
     def test_load_per_agent_llm_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test per-agent LLM override from environment."""
-        monkeypatch.setenv("AGENTFORGE_LLM_DEVOPS", "anthropic:claude-haiku-3-5")
+        monkeypatch.setenv("LOOM_LLM_DEVOPS", "anthropic:claude-haiku-3-5")
 
         config = load_config(auto_detect_llm=False)
         devops_config = config.get_llm_config(AgentRole.DEVOPS)
@@ -244,10 +244,10 @@ class TestGetLLMForRole:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-        config = AgentForgeConfig()
+        config = LoomConfig()
 
         # Mock the create_llm function to avoid actual LLM creation
-        with patch("agentforge.llm.factory.create_llm") as mock_create:
+        with patch("loom.llm.factory.create_llm") as mock_create:
             mock_llm = MagicMock()
             mock_create.return_value = mock_llm
 
@@ -260,11 +260,11 @@ class TestGetLLMForRole:
 
     def test_get_llm_uses_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that get_llm_for_role uses per-role override."""
-        config = AgentForgeConfig(
+        config = LoomConfig(
             llm_overrides={AgentRole.DEVOPS: LLMConfig(provider="openai", model="gpt-4o-mini")}
         )
 
-        with patch("agentforge.llm.factory.create_llm") as mock_create:
+        with patch("loom.llm.factory.create_llm") as mock_create:
             mock_llm = MagicMock()
             mock_create.return_value = mock_llm
 

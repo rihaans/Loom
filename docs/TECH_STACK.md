@@ -82,7 +82,7 @@ The frontend is a separate React app:
 
 ```toml
 [project]
-name = "agentforge"
+name = "loom"
 version = "0.1.0"
 description = "Autonomous software development team built on LangGraph"
 requires-python = ">=3.11"
@@ -122,7 +122,7 @@ search = ["tavily-python~=0.5"]
 tracing = ["langsmith~=0.1"]
 
 [project.scripts]
-agentforge = "agentforge.cli:app"
+loom = "loom.cli:app"
 
 [tool.ruff]
 line-length = 100

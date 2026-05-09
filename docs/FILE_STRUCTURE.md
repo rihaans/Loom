@@ -1,7 +1,7 @@
 # FILE_STRUCTURE — Project Tree
 
 ```
-agentforge/
+loom/
 ├── README.md                          # User-facing readme
 ├── LICENSE                            # MIT
 ├── pyproject.toml                     # Package metadata + deps
@@ -10,7 +10,7 @@ agentforge/
 ├── .env.example                       # Template for API keys
 ├── .gitignore
 ├── .ruff.toml                         # Lint config
-├── agentforge.example.toml            # Example user config
+├── loom.example.toml            # Example user config
 │
 ├── docker/                            # Sandbox + dashboard images
 │   ├── sandbox.Dockerfile             # Pre-built test runner image
@@ -35,25 +35,25 @@ agentforge/
 │   ├── PROGRESS.md
 │   └── images/                        # Generated graph diagrams, screenshots
 │
-├── src/agentforge/                    # Main package
-│   ├── __init__.py                    # exports build(), AgentForgeConfig
-│   ├── __main__.py                    # python -m agentforge → CLI
+├── src/loom/                    # Main package
+│   ├── __init__.py                    # exports build(), LoomConfig
+│   ├── __main__.py                    # python -m loom → CLI
 │   │
 │   ├── cli/                           # CLI entry points
 │   │   ├── __init__.py
 │   │   ├── app.py                     # Typer app, command registration
 │   │   ├── commands/
-│   │   │   ├── build.py               # `agentforge build "..."`
-│   │   │   ├── ui.py                  # `agentforge ui`
-│   │   │   ├── sandbox.py             # `agentforge sandbox build/test/shell`
-│   │   │   ├── resume.py              # `agentforge resume <thread_id>`
-│   │   │   └── config.py              # `agentforge config show/edit`
+│   │   │   ├── build.py               # `loom build "..."`
+│   │   │   ├── ui.py                  # `loom ui`
+│   │   │   ├── sandbox.py             # `loom sandbox build/test/shell`
+│   │   │   ├── resume.py              # `loom resume <thread_id>`
+│   │   │   └── config.py              # `loom config show/edit`
 │   │   └── tui.py                     # Textual live progress UI
 │   │
 │   ├── config/
 │   │   ├── __init__.py
 │   │   ├── loader.py                  # CLI flags > env > toml > defaults
-│   │   ├── models.py                  # AgentForgeConfig, LLMConfig
+│   │   ├── models.py                  # LoomConfig, LLMConfig
 │   │   └── defaults.py                # built-in defaults, profile presets
 │   │
 │   ├── state/
@@ -163,7 +163,7 @@ agentforge/
 │   └── public/
 │       └── favicon.svg
 │
-├── tests/                             # Tests for AgentForge itself
+├── tests/                             # Tests for Loom itself
 │   ├── conftest.py                    # fixtures
 │   ├── unit/
 │   │   ├── test_state.py
@@ -225,13 +225,13 @@ agentforge/
 
 When implementing, the order is:
 
-1. `src/agentforge/state/models.py` — defines all types
-2. `src/agentforge/agents/prompts/*` — all prompts
-3. `src/agentforge/llm/factory.py` — LLM provider selection
-4. `src/agentforge/agents/<each>.py` — node functions
-5. `src/agentforge/graph/builder.py` — wires everything together
-6. `src/agentforge/output/writer.py` — materializes files
-7. `src/agentforge/cli/commands/build.py` — CLI entry
+1. `src/loom/state/models.py` — defines all types
+2. `src/loom/agents/prompts/*` — all prompts
+3. `src/loom/llm/factory.py` — LLM provider selection
+4. `src/loom/agents/<each>.py` — node functions
+5. `src/loom/graph/builder.py` — wires everything together
+6. `src/loom/output/writer.py` — materializes files
+7. `src/loom/cli/commands/build.py` — CLI entry
 8. Tests for each layer
 
 The web dashboard comes after the CLI works end-to-end.
@@ -241,12 +241,12 @@ The web dashboard comes after the CLI works end-to-end.
 Most `__init__.py` files re-export the public API of their module:
 
 ```python
-# src/agentforge/__init__.py
-from agentforge.core import build, BuildResult
-from agentforge.config.models import AgentForgeConfig, LLMConfig
-from agentforge.state.models import AgentState, PRD, ArchitectureDoc
+# src/loom/__init__.py
+from loom.core import build, BuildResult
+from loom.config.models import LoomConfig, LLMConfig
+from loom.state.models import AgentState, PRD, ArchitectureDoc
 
-__all__ = ["build", "BuildResult", "AgentForgeConfig", "LLMConfig",
+__all__ = ["build", "BuildResult", "LoomConfig", "LLMConfig",
            "AgentState", "PRD", "ArchitectureDoc"]
 __version__ = "0.1.0"
 ```
