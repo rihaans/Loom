@@ -25,6 +25,7 @@ from loom.state.models import (
     Event,
     ExecutionResult,
     FileBundle,
+    LoomGraphState,
     QAFeedback,
     TechChoice,
     TestCase,
@@ -37,6 +38,7 @@ from loom.state.reducers import (
     increment,
     last_value,
     merge_dicts,
+    merge_messages_dict,
 )
 
 __all__ = [
@@ -57,6 +59,7 @@ __all__ = [
     "ExecutionResult",
     "FileBundle",
     "HttpMethod",
+    "LoomGraphState",
     # Enums
     "Phase",
     "Priority",
@@ -75,4 +78,5 @@ __all__ = [
     "last_value",
     # Reducers
     "merge_dicts",
+    "merge_messages_dict",
 ]

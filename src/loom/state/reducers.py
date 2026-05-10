@@ -6,6 +6,12 @@ update the same field. LangGraph uses these via Annotated types.
 
 from typing import Any, TypeVar
 
+try:
+    from langchain_core.messages import BaseMessage
+    _HAS_LANGCHAIN = True
+except ImportError:
+    _HAS_LANGCHAIN = False
+
 T = TypeVar("T")
 
 
@@ -98,3 +104,33 @@ def coalesce(a: T | None, b: T | None) -> T | None:
         b if b is not None, otherwise a
     """
     return b if b is not None else a
+
+
+def merge_messages_dict(
+    a: dict[str, list[Any]] | None,
+    b: dict[str, list[Any]] | None,
+) -> dict[str, list[Any]]:
+    """Merge two agent_messages dicts by appending message lists per key.
+
+    Each key is an agent role name (e.g. "product_manager", "architect").
+    Merging appends new messages to the existing list for that role rather
+    than replacing it — so history accumulates across graph re-entries.
+
+    Args:
+        a: Existing messages per agent role
+        b: New messages to merge in
+
+    Returns:
+        Combined dict where each role's list is a + b for that role
+    """
+    if a is None:
+        a = {}
+    if b is None:
+        b = {}
+    result: dict[str, list[Any]] = dict(a)
+    for role, messages in b.items():
+        if role in result:
+            result[role] = result[role] + messages
+        else:
+            result[role] = list(messages)
+    return result

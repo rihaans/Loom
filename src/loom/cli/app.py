@@ -13,12 +13,14 @@ from rich.table import Table
 app = typer.Typer(
     name="loom",
     help="Autonomous software development team built on LangGraph.",
-    no_args_is_help=True,
+    no_args_is_help=False,  # `loom` with no args opens the chat REPL
+    invoke_without_command=True,
 )
 
-# Use legacy console mode on Windows to avoid Unicode issues
-_is_windows = sys.platform == "win32"
-console = Console(legacy_windows=_is_windows, force_terminal=not _is_windows)
+# Modern Windows Terminal / PowerShell support truecolor + Unicode natively.
+# Forcing legacy_windows=True would downgrade the gradient logo to 16-color
+# ANSI; we let rich auto-detect (legacy_windows=False on capable terminals).
+console = Console(force_terminal=True, color_system="truecolor")
 
 # Subcommand groups
 sandbox_app = typer.Typer(help="Sandbox management commands")
@@ -27,6 +29,34 @@ memory_app = typer.Typer(help="Memory system commands")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(config_app, name="config")
 app.add_typer(memory_app, name="memory")
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    plain: bool = typer.Option(False, "--plain", help="Disable rich rendering"),
+    model: str | None = typer.Option(
+        None, "--model", "-m", help="LLM model override for this session"
+    ),
+) -> None:
+    """Loom — type `loom` to chat, or use one of the subcommands."""
+    if ctx.invoked_subcommand is not None:
+        return
+    # No subcommand → launch the chat REPL
+    from loom.cli.chat import ChatRenderer, ChatSession
+    from loom.config import load_config
+
+    config = load_config()
+    if model:
+        from loom.config import parse_llm_string
+        config.llm_default = parse_llm_string(model)
+
+    renderer = ChatRenderer(console=console, plain=plain)
+    session = ChatSession(config=config, renderer=renderer)
+    try:
+        asyncio.run(session.run())
+    except KeyboardInterrupt:
+        console.print("\n[dim]Interrupted.[/dim]")
 
 
 @app.command()
@@ -392,12 +422,47 @@ def doctor() -> None:
     else:
         console.print("[yellow][--][/yellow] Docker not available (sandbox will use subprocess fallback)")
 
+    # Chat-mode prerequisites (Phase 9)
+    console.print("\n[bold]Chat REPL:[/bold]")
+    try:
+        import prompt_toolkit  # noqa: F401
+        console.print("[green][OK][/green] prompt_toolkit installed")
+    except ImportError:
+        console.print(
+            "[red][FAIL][/red] prompt_toolkit missing — install with: pip install prompt_toolkit"
+        )
+    try:
+        import rich  # noqa: F401
+        console.print("[green][OK][/green] rich installed")
+    except ImportError:
+        console.print("[red][FAIL][/red] rich missing — required for chat rendering")
+    try:
+        import aiosqlite  # noqa: F401
+        console.print("[green][OK][/green] aiosqlite installed (chat checkpointing)")
+    except ImportError:
+        console.print(
+            "[yellow][--][/yellow] aiosqlite missing — chat will use in-memory checkpoints only"
+        )
+
+    # Terminal capabilities
+    if sys.stdout.isatty():
+        console.print("[green][OK][/green] Running in a TTY (chat will render correctly)")
+    else:
+        console.print(
+            "[yellow][--][/yellow] Not a TTY — use --plain for accessibility / CI mode"
+        )
+
     # Summary
     console.print("\n[bold]Recommendation:[/bold]")
     if anthropic_key or openai_key:
-        console.print("[green]Ready to build![/green] Run: loom build \"your project description\"")
+        console.print(
+            "[green]Ready to build![/green] Run: [cyan]loom[/cyan] (chat) "
+            "or [cyan]loom build \"…\"[/cyan] (one-shot)"
+        )
     elif subprocess.run(["curl", "-s", "http://localhost:11434/api/tags"], capture_output=True).returncode == 0:
-        console.print("[green]Ready with Ollama![/green] Run: loom build \"your project\" --model ollama:mistral")
+        console.print(
+            "[green]Ready with Ollama![/green] Run: [cyan]loom --model ollama:qwen2.5-coder:7b[/cyan]"
+        )
     else:
         console.print("[yellow]Set ANTHROPIC_API_KEY or OPENAI_API_KEY to get started.[/yellow]")
         console.print("Or install Ollama for local LLM: https://ollama.ai")
@@ -998,6 +1063,71 @@ def memory_import(
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
+
+
+# =============================================================================
+# Chat history (Phase 9.5)
+# =============================================================================
+
+history_app = typer.Typer(help="Browse and replay chat sessions")
+app.add_typer(history_app, name="history")
+
+
+@history_app.callback(invoke_without_command=True)
+def history_root(
+    ctx: typer.Context,
+    limit: int = typer.Option(20, "--limit", "-n", help="Maximum sessions to list"),
+) -> None:
+    """List recent chat sessions (default action when no subcommand given)."""
+    if ctx.invoked_subcommand is not None:
+        return
+    from loom.cli.chat.transcript import list_transcripts
+
+    sessions = list_transcripts()
+    if not sessions:
+        console.print("[dim]No chat sessions found.[/dim]")
+        return
+
+    table = Table(title="Chat sessions")
+    table.add_column("Thread ID", style="cyan")
+    table.add_column("Modified", style="dim")
+    table.add_column("Size", justify="right", style="dim")
+    for entry in sessions[:limit]:
+        size_kb = entry["size_bytes"] / 1024
+        table.add_row(
+            entry["thread_id"],
+            entry["modified_at"],
+            f"{size_kb:.1f} KB",
+        )
+    console.print(table)
+
+
+@history_app.command("show")
+def history_show(
+    thread_id: str = typer.Argument(..., help="Thread ID to replay"),
+) -> None:
+    """Replay the events of a chat session."""
+    from loom.cli.chat.transcript import read_transcript
+
+    events = read_transcript(thread_id)
+    if not events:
+        console.print(f"[red]No transcript found for thread:[/red] {thread_id}")
+        raise typer.Exit(1)
+
+    for ev in events:
+        ts = ev.get("timestamp", "")
+        role = ev.get("role", "?")
+        if role == "user":
+            console.print(f"[dim]{ts}[/dim] [cyan]You[/cyan] ▸ {ev.get('content', '')}")
+        elif role == "assistant":
+            agent = ev.get("agent", "agent")
+            console.print(
+                f"[dim]{ts}[/dim] [magenta]{agent}[/magenta] ▸ {ev.get('content', '')}"
+            )
+        elif role == "system":
+            cmd = ev.get("command", "")
+            args = " ".join(ev.get("args", []))
+            console.print(f"[dim]{ts}[/dim] [yellow]/{cmd} {args}[/yellow]")
 
 
 if __name__ == "__main__":

@@ -563,6 +563,98 @@ class TestAgentState:
         with pytest.raises(ValidationError):
             AgentState(description="")
 
+    def test_chat_fields_default_to_none(self) -> None:
+        """Phase 9: new chat fields should have safe defaults."""
+        state = AgentState(description="test")
+        assert state.agent_messages == {}
+        assert state.pending_user_input is None
+        assert state.agent_status is None
+        assert state.interactive is False
+
+    def test_chat_fields_round_trip(self) -> None:
+        """Phase 9: chat fields survive model_dump/model_validate cycle."""
+        state = AgentState(
+            description="test",
+            pending_user_input="build me something",
+            agent_status="wait_for_input",
+            interactive=True,
+        )
+        data = state.model_dump()
+        restored = AgentState.model_validate(data)
+        assert restored.pending_user_input == "build me something"
+        assert restored.agent_status == "wait_for_input"
+        assert restored.interactive is True
+
+
+# =============================================================================
+# Reducer Tests — merge_messages_dict
+# =============================================================================
+
+
+class TestMergeMessagesDict:
+    """Test the merge_messages_dict reducer for agent conversation history."""
+
+    def test_both_empty(self) -> None:
+        from loom.state.reducers import merge_messages_dict
+        assert merge_messages_dict({}, {}) == {}
+
+    def test_none_inputs(self) -> None:
+        from loom.state.reducers import merge_messages_dict
+        assert merge_messages_dict(None, None) == {}
+        assert merge_messages_dict(None, {"pm": ["msg"]}) == {"pm": ["msg"]}
+        assert merge_messages_dict({"pm": ["msg"]}, None) == {"pm": ["msg"]}
+
+    def test_new_key_added(self) -> None:
+        from loom.state.reducers import merge_messages_dict
+        a = {"product_manager": ["msg1"]}
+        b = {"architect": ["msg2"]}
+        result = merge_messages_dict(a, b)
+        assert result == {"product_manager": ["msg1"], "architect": ["msg2"]}
+
+    def test_messages_appended_not_replaced(self) -> None:
+        from loom.state.reducers import merge_messages_dict
+        a = {"product_manager": ["turn1", "turn2"]}
+        b = {"product_manager": ["turn3"]}
+        result = merge_messages_dict(a, b)
+        assert result["product_manager"] == ["turn1", "turn2", "turn3"]
+
+    def test_does_not_mutate_inputs(self) -> None:
+        from loom.state.reducers import merge_messages_dict
+        a = {"pm": ["msg1"]}
+        b = {"pm": ["msg2"]}
+        a_copy = {"pm": ["msg1"]}
+        merge_messages_dict(a, b)
+        assert a == a_copy  # a is unchanged
+
+    def test_multiple_roles_merged(self) -> None:
+        from loom.state.reducers import merge_messages_dict
+        a = {"pm": ["a1"], "arch": ["b1"]}
+        b = {"pm": ["a2"], "arch": ["b2"]}
+        result = merge_messages_dict(a, b)
+        assert result["pm"] == ["a1", "a2"]
+        assert result["arch"] == ["b1", "b2"]
+
+
+# =============================================================================
+# EventType — Phase 9 new values
+# =============================================================================
+
+
+class TestEventTypePhase9:
+    """Test new EventType values added in Phase 9."""
+
+    def test_agent_turn(self) -> None:
+        assert EventType.AGENT_TURN == "agent_turn"
+
+    def test_agent_turn_limit(self) -> None:
+        assert EventType.AGENT_TURN_LIMIT == "agent_turn_limit"
+
+    def test_chat_input(self) -> None:
+        assert EventType.CHAT_INPUT == "chat_input"
+
+    def test_chat_command(self) -> None:
+        assert EventType.CHAT_COMMAND == "chat_command"
+
 
 # =============================================================================
 # Config Model Tests

@@ -89,6 +89,29 @@ log_level = "INFO"
 warn_threshold_usd = 1.0
 
 # =============================================================================
+# Chat REPL (Phase 9)
+# =============================================================================
+
+[chat]
+# Disable token streaming (use full responses) — set true for slow Ollama
+no_streaming = false
+
+# Use plain rendering (no colors, no markdown) — for accessibility / CI
+plain = false
+
+# Per-agent colors override (optional). Uses rich color names.
+# [chat.colors]
+# product_manager = "cyan"
+# architect = "magenta"
+
+# Cost optimization (optional): use a cheap model for clarifying turns
+# and an expensive model only when drafting the final artifact.
+# [chat.cost_optimization]
+# clarify_model = "anthropic:claude-haiku-3-5"
+# draft_model   = "anthropic:claude-sonnet-4-5"
+# truncate_history_after_turns = 6
+
+# =============================================================================
 # Profiles (activate with --profile <name>)
 # =============================================================================
 

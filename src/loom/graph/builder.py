@@ -22,10 +22,13 @@ from loom.agents import (
 from loom.config import LoomConfig
 from loom.graph.parallel import route_to_devs, route_to_retry_devs
 from loom.graph.routing import (
+    route_after_architect_chat,
     route_after_devops,
     route_after_pm,
+    route_after_pm_chat,
     route_after_qa,
 )
+from loom.state.models import LoomGraphState
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +77,12 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     Returns:
         Compiled StateGraph ready for execution
     """
-    # Create graph with AgentState schema
-    # Using dict for state since LangGraph works with dicts
-    graph = StateGraph(dict)
+    # Create graph with the LoomGraphState TypedDict schema. This gives each
+    # field its own channel with the right reducer (e.g. agent_messages uses
+    # merge_messages_dict to append per-agent history). Required for the
+    # chat-mode loop: aupdate_state(values) only merges correctly when the
+    # graph schema declares per-field channels.
+    graph = StateGraph(LoomGraphState)
 
     # Wrap nodes to inject config
     async def pm_node(state: dict) -> dict:
@@ -124,13 +130,27 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     # Set entry point
     graph.set_entry_point("product_manager")
 
-    # Add conditional edges
-    # Product manager routes to memory_retrieve (to fetch similar builds)
+    # ------------------------------------------------------------------
+    # Conversational nodes self-loop in chat mode.
+    # In legacy mode (interactive=False) the routing is unchanged: PM
+    # produces a PRD in one shot, then proceeds to memory_retrieve.
+    # In chat mode (interactive=True) PM and Architect can return
+    # agent_status in {wait_for_input, ready_to_draft}, which routes
+    # back to the same node so the chat loop can supply the next turn.
+    # When compiled with interrupt_after=["product_manager", "architect"],
+    # the graph pauses after each turn and the chat REPL drives resumes.
+    # ------------------------------------------------------------------
+    def route_pm_dispatch(state: dict) -> str:
+        if state.get("interactive"):
+            return route_after_pm_chat(state)
+        return route_after_pm(state)
+
     graph.add_conditional_edges(
         "product_manager",
-        route_after_pm,
+        route_pm_dispatch,
         {
-            "architect": "memory_retrieve",  # Route to memory_retrieve first
+            "product_manager": "product_manager",  # chat self-loop
+            "architect": "memory_retrieve",         # route to memory_retrieve first
             "supervisor": "supervisor",
         },
     )
@@ -140,10 +160,18 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
 
     # Architect routes to parallel developers via Send API or supervisor on error
     def route_architect_to_devs(state: dict):
-        """Route from architect to developers using Send for parallel execution."""
+        """Route from architect to developers (or self-loop in chat mode)."""
         if state.get("error"):
             return "supervisor"
-        # Return list of Send objects for parallel fan-out
+        if state.get("interactive"):
+            decision = route_after_architect_chat(state)
+            if decision == "architect":
+                return "architect"  # self-loop for chat
+            if decision == "supervisor":
+                return "supervisor"
+            # decision == "developers" → fan-out via Send
+            return route_to_devs(state)
+        # Legacy path: always fan out to devs
         return route_to_devs(state)
 
     graph.add_conditional_edges(
@@ -219,6 +247,8 @@ def compile_graph(
     config: LoomConfig | None = None,
     checkpointer: Any | None = None,
     interrupt_before: list[str] | None = None,
+    interrupt_after: list[str] | None = None,
+    interactive: bool = False,
 ) -> Any:
     """Build and compile the agent graph.
 
@@ -227,7 +257,12 @@ def compile_graph(
         checkpointer: Optional LangGraph checkpointer (e.g., SqliteSaver)
             for state persistence. Required for interrupt support.
         interrupt_before: Optional list of node names to interrupt before.
-            Used for interactive mode review gates. Requires checkpointer.
+            Used for legacy review gates. Requires checkpointer.
+        interrupt_after: Optional list of node names to interrupt after.
+            Used by the chat REPL to pause on each conversational turn.
+        interactive: If True, automatically interrupt after the
+            conversational nodes (product_manager, architect) so the
+            chat loop can drive turn-by-turn execution.
 
     Returns:
         Compiled graph ready for execution
@@ -248,6 +283,20 @@ def compile_graph(
             )
         compile_kwargs["interrupt_before"] = interrupt_before
         logger.info(f"Compiling graph with interrupts before: {interrupt_before}")
+
+    # In chat mode, default to interrupting after the conversational nodes
+    # so the chat REPL can collect user input before each next turn.
+    if interactive and interrupt_after is None:
+        interrupt_after = ["product_manager", "architect"]
+
+    if interrupt_after is not None:
+        if checkpointer is None:
+            logger.warning(
+                "interrupt_after specified but no checkpointer provided. "
+                "Interrupts require a checkpointer for state persistence."
+            )
+        compile_kwargs["interrupt_after"] = interrupt_after
+        logger.info(f"Compiling graph with interrupts after: {interrupt_after}")
 
     compiled = graph.compile(**compile_kwargs)
     logger.info("Compiled agent graph")

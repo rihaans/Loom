@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
+
+from typing_extensions import TypedDict
+
+if TYPE_CHECKING:
+    from langchain_core.messages import BaseMessage
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -25,7 +30,7 @@ from loom.state.enums import (
     TargetAgent,
     TechLayer,
 )
-from loom.state.reducers import append_list, merge_dicts
+from loom.state.reducers import append_list, merge_dicts, merge_messages_dict
 
 # Regex patterns for validation
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -344,6 +349,20 @@ class AgentState(BaseModel):
     # Plan mode (user feedback for iterating on architecture)
     architecture_feedback: str | None = None
 
+    # Chat REPL (Phase 9) — conversational agent state
+    # Per-agent message history: {"product_manager": [HumanMessage, AIMessage, ...], ...}
+    # merge_messages_dict appends new messages rather than replacing the list.
+    agent_messages: Annotated[dict[str, list[Any]], merge_messages_dict] = Field(
+        default_factory=dict,
+        description="Per-agent conversation history for chat mode",
+    )
+    # Input waiting to be consumed by the next conversational agent node invocation.
+    # Set to '__DRAFT__' by the chat loop to trigger artifact drafting.
+    pending_user_input: str | None = None
+    # Signal from a conversational agent to the chat loop about what it needs next.
+    # Values: 'wait_for_input' | 'ready_to_draft' | 'done'
+    agent_status: str | None = None
+
     # Logs (append-only)
     events: Annotated[list[Event], append_list] = Field(default_factory=list)
     costs: Annotated[list[CostEntry], append_list] = Field(default_factory=list)
@@ -389,3 +408,60 @@ class AgentState(BaseModel):
                 cost_usd=cost_usd,
             )
         )
+
+
+# =============================================================================
+# LangGraph state schema (TypedDict)
+# =============================================================================
+#
+# Why this exists alongside AgentState:
+#
+# LangGraph requires a TypedDict (or dataclass / Pydantic) with Annotated
+# field types so each field becomes its own *channel* with its own reducer.
+# We tried passing `dict` to StateGraph and it works for normal node-return
+# updates (which are diff-merged) — but `update_state(values)` with a partial
+# dict REPLACES the whole channel rather than merging, which breaks the chat
+# loop's per-turn input injection.
+#
+# So we mirror AgentState's fields here as a TypedDict with the same
+# Annotated reducers. Nodes still read/write dicts; AgentState is still the
+# canonical Pydantic schema for validation. This TypedDict is purely the
+# graph-channel descriptor.
+
+class LoomGraphState(TypedDict, total=False):
+    """LangGraph channel schema for Loom's state machine."""
+
+    # Input
+    description: str
+    config: dict[str, Any]
+
+    # Routing
+    phase: Phase
+    retry_count: int
+    max_retries: int
+    interactive: bool
+
+    # Artifacts
+    prd: PRD | None
+    architecture: ArchitectureDoc | None
+    code_files: Annotated[dict[str, FileBundle], merge_dicts]
+    test_report: TestReport | None
+    qa_feedback: QAFeedback | None
+    devops_files: DevOpsBundle | None
+
+    # Memory + plan
+    memory_context: Any | None
+    architecture_feedback: str | None
+
+    # Chat REPL (Phase 9)
+    agent_messages: Annotated[dict[str, list[Any]], merge_messages_dict]
+    pending_user_input: str | None
+    agent_status: str | None
+
+    # Logs (append-only)
+    events: Annotated[list[Event], append_list]
+    costs: Annotated[list[CostEntry], append_list]
+
+    # Final
+    output_dir: str | None
+    error: str | None

@@ -137,6 +137,85 @@ def route_after_devops(state: dict[str, Any]) -> Literal["__end__", "supervisor"
     return "supervisor"
 
 
+def route_after_pm_chat(
+    state: dict[str, Any],
+) -> Literal["product_manager", "architect", "supervisor"]:
+    """Route after PM in chat (interactive) mode.
+
+    Loops back to product_manager while the agent still wants to talk
+    (agent_status in {wait_for_input, ready_to_draft}); proceeds to the
+    architect path once the PRD is drafted (agent_status == "done").
+
+    In chat mode an error keeps us at PM (the chat loop renders the error
+    and lets the user retry); only on explicit "done with PRD" do we
+    advance.
+
+    Args:
+        state: Current graph state
+
+    Returns:
+        Next node — self-loop, memory_retrieve (via "architect" key), or supervisor
+    """
+    status = state.get("agent_status")
+    if status == "done" and state.get("prd") is not None:
+        return "architect"
+    if status in ("wait_for_input", "ready_to_draft"):
+        return "product_manager"
+    # In chat mode, an error or unexpected state should NOT silently
+    # advance to supervisor → END. Loop back to PM so the user sees
+    # what happened and can retry. Bare error case still goes to
+    # supervisor so non-recoverable errors terminate.
+    if state.get("error") and not status:
+        return "supervisor"
+    # Fallback: keep the user in chat
+    if state.get("prd") is None:
+        return "product_manager"
+    return "architect"
+
+
+def route_after_architect_chat(
+    state: dict[str, Any],
+) -> Literal["architect", "developers", "supervisor"]:
+    """Route after Architect in chat (interactive) mode.
+
+    Loops back to architect while it's still proposing/revising; proceeds
+    to parallel developers once the ArchitectureDoc is drafted.
+
+    Args:
+        state: Current graph state
+
+    Returns:
+        Next node — self-loop, developers, or supervisor
+    """
+    if state.get("error"):
+        return "supervisor"
+
+    status = state.get("agent_status")
+    if status == "done" and state.get("architecture") is not None:
+        return "developers"
+    if status in ("wait_for_input", "ready_to_draft"):
+        return "architect"
+    if state.get("architecture") is None:
+        return "supervisor"
+    return "developers"
+
+
+def is_paused_for_input(state: dict[str, Any]) -> bool:
+    """Return True if the graph is paused waiting for chat input.
+
+    Used by the chat REPL loop to decide whether to solicit a user reply
+    before resuming graph execution.
+
+    Args:
+        state: A graph state snapshot (or state values dict)
+
+    Returns:
+        True if the chat loop should prompt the user before resuming
+    """
+    status = state.get("agent_status")
+    return status in ("wait_for_input", "ready_to_draft")
+
+
 def should_continue(state: dict[str, Any]) -> bool:
     """Check if the graph should continue execution.
 

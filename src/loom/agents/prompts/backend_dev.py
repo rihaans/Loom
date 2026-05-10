@@ -17,7 +17,7 @@ BACKEND_DEV_SYSTEM_PROMPT = inspect.cleandoc("""
     - Validate inputs (Pydantic for FastAPI, Joi/Zod for Express, marshmallow for Flask).
     - Return appropriate HTTP status codes (201 for create, 404 for not found, 422 for validation, etc.).
     - Include CORS middleware allowing the frontend origin.
-    - Include a health endpoint: GET /health -> {"status":"ok"}.
+    - Include a health endpoint: GET /health -> {{"status":"ok"}}.
     - Include a top-level entry: backend/main.py or backend/app/main.py that runs the server.
     - Include requirements.txt or package.json with pinned versions.
 
