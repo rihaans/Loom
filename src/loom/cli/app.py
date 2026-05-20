@@ -10,6 +10,10 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+# Spinner detection: cmd.exe and older Windows terminals don't render
+# Braille spinner glyphs, so fall back to ASCII line spinner there.
+_is_windows = sys.platform == "win32"
+
 app = typer.Typer(
     name="loom",
     help="Autonomous software development team built on LangGraph.",
@@ -117,7 +121,7 @@ def build(
                 progress.update(task, completed=True)
 
                 if result.success:
-                    console.print(f"\n[green][OK] Build complete![/green]")
+                    console.print("\n[green][OK] Build complete![/green]")
                     console.print(f"  Output: [cyan]{result.output_dir}[/cyan]")
                     console.print(f"  Tokens: {result.total_tokens:,}")
                     console.print(f"  Cost: ${result.total_cost_usd:.4f}")
@@ -163,7 +167,7 @@ def resume(
         result = resume_build_sync(thread_id=thread_id, output_dir=output_dir)
 
         if result.success:
-            console.print(f"\n[green][OK] Build complete![/green]")
+            console.print("\n[green][OK] Build complete![/green]")
             console.print(f"  Output: [cyan]{result.output_dir}[/cyan]")
         else:
             console.print(f"\n[red][FAIL] Build failed:[/red] {result.error}")
@@ -177,7 +181,6 @@ def resume(
 @sandbox_app.command("build")
 def sandbox_build() -> None:
     """Build the sandbox Docker image."""
-    from loom.sandbox import get_sandbox_info
 
     console.print("[bold]Building sandbox image...[/bold]")
 
@@ -336,7 +339,7 @@ def ui(
     """Launch the web dashboard."""
     import uvicorn
 
-    console.print(f"[bold]Starting Loom Dashboard[/bold]")
+    console.print("[bold]Starting Loom Dashboard[/bold]")
     console.print(f"  Server: http://{host}:{port}")
 
     if not dev:
@@ -363,13 +366,10 @@ def doctor() -> None:
 
     console.print("[bold]Loom Doctor[/bold]\n")
 
-    # Check Python version
-    import sys
+    # Python version — pyproject's requires-python gate means we wouldn't have
+    # reached this code on < 3.11, so the version is always acceptable here.
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    if sys.version_info >= (3, 10):
-        console.print(f"[green][OK][/green] Python {py_version}")
-    else:
-        console.print(f"[red][FAIL][/red] Python {py_version} (requires 3.10+)")
+    console.print(f"[green][OK][/green] Python {py_version}")
 
     # Check API keys
     console.print("\n[bold]API Keys:[/bold]")
@@ -504,7 +504,7 @@ def estimate(
     if estimated_cost == 0:
         console.print("\n[dim]Note: Local models (Ollama) have no API cost.[/dim]")
     else:
-        console.print(f"\n[dim]Actual cost may vary based on project complexity.[/dim]")
+        console.print("\n[dim]Actual cost may vary based on project complexity.[/dim]")
 
 
 # Plan commands
@@ -622,7 +622,7 @@ def plan(
     if choice == "S":
         plan_path = save if save else default_plan_path(state)
         save_plan(state, plan_path, thread_id, description, config)
-        console.print(f"[green][OK] Plan saved.[/green]")
+        console.print("[green][OK] Plan saved.[/green]")
         console.print(f"Resume with: [cyan]loom build --from-plan {plan_path}[/cyan]")
         raise typer.Exit(0)
 
@@ -660,7 +660,7 @@ def plan(
         if choice == "N":
             plan_path = save if save else default_plan_path(state)
             save_plan(state, plan_path, thread_id, description, config)
-            console.print(f"[green][OK] Plan saved.[/green]")
+            console.print("[green][OK] Plan saved.[/green]")
             console.print(f"Resume with: [cyan]loom build --from-plan {plan_path}[/cyan]")
             raise typer.Exit(0)
 
@@ -698,7 +698,7 @@ def plan(
                 console.print(f"\n[red][FAIL] Build failed:[/red] {final_state['error']}")
                 raise typer.Exit(1)
             else:
-                console.print(f"\n[green][OK] Build complete![/green]")
+                console.print("\n[green][OK] Build complete![/green]")
                 output_dir = final_state.get("output_dir", "./output")
                 console.print(f"  Output: [cyan]{output_dir}[/cyan]")
 
@@ -724,7 +724,7 @@ def build_from_plan(
     from loom.config import LoomConfig
     from loom.plan import load_plan
     from loom.state.enums import Phase
-    from loom.state.models import ArchitectureDoc, PRD
+    from loom.state.models import PRD, ArchitectureDoc
 
     console.print(f"[bold blue]Building from plan:[/bold blue] {plan_path}")
 
@@ -809,7 +809,7 @@ def build_from_plan(
             console.print(f"\n[red][FAIL] Build failed:[/red] {final_state['error']}")
             raise typer.Exit(1)
         else:
-            console.print(f"\n[green][OK] Build complete![/green]")
+            console.print("\n[green][OK] Build complete![/green]")
             out_dir = final_state.get("output_dir", output_dir)
             console.print(f"  Output: [cyan]{out_dir}[/cyan]")
 
@@ -867,7 +867,6 @@ def memory_list(
     """List stored memory records."""
     from loom.config import load_config
     from loom.memory.factory import get_memory_store, is_memory_available
-    from loom.memory.store import LanceDBStore
 
     if not is_memory_available():
         console.print("[yellow]Memory dependencies not installed.[/yellow]")

@@ -341,7 +341,7 @@ class LanceDBStore(MemoryStore):
             raise FileNotFoundError(f"Import file not found: {path}")
 
         count = 0
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
@@ -402,7 +402,7 @@ class InMemoryStore(MemoryStore):
         import math
 
         def cosine_similarity(a: list[float], b: list[float]) -> float:
-            dot = sum(x * y for x, y in zip(a, b))
+            dot = sum(x * y for x, y in zip(a, b, strict=True))
             norm_a = math.sqrt(sum(x * x for x in a))
             norm_b = math.sqrt(sum(x * x for x in b))
             if norm_a == 0 or norm_b == 0:
@@ -452,7 +452,7 @@ class InMemoryStore(MemoryStore):
             raise FileNotFoundError(f"Import file not found: {path}")
 
         count = 0
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue

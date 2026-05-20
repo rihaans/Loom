@@ -248,7 +248,6 @@ def build_references(choice: Any, all_choices: list[Any]) -> str:
     related = related_layers.get(choice.layer, [])
     for i, other in enumerate(all_choices, start=1):
         if other.layer in related and other != choice:
-            other_slug = slugify(f"{other.layer.value}-{other.technology}")
             refs.append(f"- See also: ADR-{i:04d} ({other.technology})")
 
     if not refs:

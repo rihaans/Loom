@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
-    from langchain_core.messages import BaseMessage
+    pass
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 

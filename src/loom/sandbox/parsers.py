@@ -3,7 +3,6 @@
 import json
 import logging
 import re
-from typing import Any
 
 from loom.state.models import TestCase, TestReport
 
@@ -160,7 +159,8 @@ def parse_jest_output(stdout: str, stderr: str = "") -> TestReport:
     # Parse text output
     # Match: ✓ test name (Xms) or ✕ test name
     pass_pattern = re.compile(r"[✓✔]\s+(.+?)(?:\s+\((\d+)\s*m?s\))?$", re.MULTILINE)
-    fail_pattern = re.compile(r"[✕✗×]\s+(.+?)(?:\s+\((\d+)\s*m?s\))?$", re.MULTILINE)
+    # The multiplication-sign char in the class is intentional: Vitest emits it for failures.
+    fail_pattern = re.compile(r"[✕✗×]\s+(.+?)(?:\s+\((\d+)\s*m?s\))?$", re.MULTILINE)  # noqa: RUF001
     skip_pattern = re.compile(r"[○◌]\s+skipped\s+(.+)", re.MULTILINE)
 
     for match in pass_pattern.finditer(stdout):
@@ -186,7 +186,7 @@ def parse_jest_output(stdout: str, stderr: str = "") -> TestReport:
         stdout,
     )
     if summary_match:
-        p, f, t = summary_match.groups()
+        p, f, _total = summary_match.groups()
         passed = int(p) if p else passed
         failed = int(f) if f else failed
 

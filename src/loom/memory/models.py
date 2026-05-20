@@ -75,7 +75,7 @@ class MemoryRecord(BaseModel):
     )
 
     @classmethod
-    def from_state(cls, state: "AgentState", run_id: str) -> "MemoryRecord":
+    def from_state(cls, state: AgentState, run_id: str) -> MemoryRecord:
         """Create a MemoryRecord from final build state.
 
         Args:
@@ -164,7 +164,9 @@ class MemoryContext(BaseModel):
 
         lines = ["# Similar past builds (use as guidance, not constraints)"]
 
-        for i, (rec, score) in enumerate(zip(self.examples, self.similarity_scores)):
+        for i, (rec, score) in enumerate(
+            zip(self.examples, self.similarity_scores, strict=True)
+        ):
             lines.append(f"\n## Example {i + 1} (similarity {score:.2f})")
             lines.append(f"Project: {rec.one_liner}")
             lines.append(f"Stack chosen: {rec.stack_summary}")

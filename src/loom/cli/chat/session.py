@@ -22,15 +22,22 @@ import os
 import uuid
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 from loom.cli.chat.commands import (
-    HELP_TEXT,
+    HELP_ENTRIES,
     SlashCommand,
     SlashCommandParser,
     SlashCommandResult,
 )
+from loom.cli.chat.input import ChatInputReader
+from loom.cli.chat.renderer import ChatRenderer
+from loom.cli.chat.transcript import append_event, get_chat_path
+from loom.config import LoomConfig
+from loom.graph.builder import compile_graph
+from loom.graph.routing import is_paused_for_input
+from loom.state.enums import AgentRole
 
 # Short affirmative replies that should trigger drafting when the agent has
 # asked something like "want me to draft?" — treats plain "yes" as /done so
@@ -69,13 +76,7 @@ def looks_affirmative(text: str) -> bool:
         if words and words[0] in _AFFIRMATIVE_PREFIXES:
             return True
     return False
-from loom.cli.chat.input import ChatInputReader
-from loom.cli.chat.renderer import ChatRenderer
-from loom.cli.chat.transcript import append_event, get_chat_path
-from loom.config import LoomConfig
-from loom.graph.builder import compile_graph
-from loom.graph.routing import is_paused_for_input
-from loom.state.enums import AgentRole
+
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +310,15 @@ class ChatSession:
             None for commands that were handled internally
         """
         if cmd.command == SlashCommand.HELP:
-            self.renderer.console.print(HELP_TEXT)
+            self.renderer.render_help(HELP_ENTRIES)
+            return None
+
+        if cmd.command == SlashCommand.STATUS:
+            self._render_status(values)
+            return None
+
+        if cmd.command == SlashCommand.CLEAR:
+            self.renderer.clear()
             return None
 
         if cmd.command == SlashCommand.QUIT:
@@ -381,14 +390,69 @@ class ChatSession:
         )
 
     def _render_cost(self, values: dict[str, Any]) -> None:
+        """Render the `/cost` command — per-role breakdown table."""
         costs = values.get("costs", [])
-        total_cost = sum(getattr(c, "cost_usd", 0.0) for c in costs)
+
+        # Group token / dollar totals by agent role. CostEntry uses `agent`;
+        # tolerate `agent_role` / `role` for tests and forward-compat.
+        per_role: dict[str, list[int]] = {}  # role -> [input_tok, output_tok, micro_cost]
+        for c in costs:
+            role = (
+                getattr(c, "agent", None)
+                or getattr(c, "agent_role", None)
+                or getattr(c, "role", None)
+                or "unknown"
+            )
+            role_key = str(role).lower() if role else "unknown"
+            entry = per_role.setdefault(role_key, [0, 0, 0])
+            entry[0] += int(getattr(c, "input_tokens", 0) or 0)
+            entry[1] += int(getattr(c, "output_tokens", 0) or 0)
+            # Store cost in micro-dollars to avoid float drift in summation.
+            entry[2] += round(float(getattr(c, "cost_usd", 0.0) or 0.0) * 1_000_000)
+
+        # Convert micro-cost back to dollars and tuple-ify for the renderer.
+        per_role_out: dict[str, tuple[int, int, float]] = {
+            role: (vals[0], vals[1], vals[2] / 1_000_000)
+            for role, vals in per_role.items()
+        }
+        total_tokens = sum(v[0] + v[1] for v in per_role_out.values())
+        total_cost = sum(v[2] for v in per_role_out.values())
+
+        self.renderer.render_cost_table(per_role_out, total_tokens, total_cost)
+
+    def _render_status(self, values: dict[str, Any]) -> None:
+        """Render the `/status` command — current build state at-a-glance."""
+        costs = values.get("costs", [])
+        total_cost = sum(float(getattr(c, "cost_usd", 0.0) or 0.0) for c in costs)
         total_tokens = sum(
-            getattr(c, "input_tokens", 0) + getattr(c, "output_tokens", 0)
+            int(getattr(c, "input_tokens", 0) or 0)
+            + int(getattr(c, "output_tokens", 0) or 0)
             for c in costs
         )
-        self.renderer.render_status(
-            f"Tokens: {total_tokens:,}  ·  Cost: ${total_cost:.4f}"
+
+        phase_val = values.get("phase")
+        phase_str = str(phase_val) if phase_val else None
+
+        llm = self.config.llm_default
+        model_label = f"{llm.provider}:{llm.model}"
+
+        artifacts = {
+            "PRD":          values.get("prd") is not None,
+            "Architecture": values.get("architecture") is not None,
+            "Code":         bool(values.get("code_files")),
+            "Tests":        values.get("test_report") is not None,
+            "DevOps":       values.get("devops_files") is not None,
+        }
+
+        self.renderer.render_status_panel(
+            phase=phase_str,
+            active_role=self._current_role,
+            tokens=total_tokens,
+            cost_usd=total_cost,
+            retries=int(values.get("retry_count", 0) or 0),
+            max_retries=int(values.get("max_retries", self.config.max_retries) or 0),
+            artifacts=artifacts,
+            model_label=model_label,
         )
 
     # ---- Internal helpers ----------------------------------------------
@@ -442,6 +506,11 @@ class ChatSession:
             if new_count <= already_rendered:
                 continue
             new_msgs = history[already_rendered:]
+            # If the work just moved to a new agent, drop a one-line phase
+            # breadcrumb so the user has a "you are here" indicator without
+            # having to type /status.
+            if role_key != self._current_role:
+                self.renderer.render_phase_breadcrumb(role_key)
             for msg in new_msgs:
                 if isinstance(msg, AIMessage):
                     self.renderer.render_agent_speaker(role_key)

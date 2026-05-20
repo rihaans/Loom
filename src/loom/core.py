@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from loom.config import LoomConfig, BuildResult, load_config
+from loom.config import BuildResult, LoomConfig, load_config
 from loom.graph.builder import compile_graph
 from loom.graph.checkpoint import (
     generate_thread_id,

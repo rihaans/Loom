@@ -6,6 +6,8 @@ that the ChatSession dispatches to handlers.
 
 Supported commands (canonical list — see CHAT_INTERFACE.md § 7):
   /help           Show command reference
+  /status         Show current build state (phase, agent, tokens, cost)
+  /clear          Clear the screen (keeps transcript)
   /quit, /q       Exit the session (saves checkpoint)
   /done           Signal the current agent to draft (e.g. PM → write PRD)
   /restart        Discard current build, start over
@@ -27,6 +29,8 @@ class SlashCommand(StrEnum):
     """Canonical command identifiers."""
 
     HELP = "help"
+    STATUS = "status"
+    CLEAR = "clear"
     QUIT = "quit"
     DONE = "done"
     RESTART = "restart"
@@ -56,6 +60,8 @@ _ALIASES: dict[str, SlashCommand] = {
     "model": SlashCommand.MODEL,
     "cost": SlashCommand.COST,
     "tokens": SlashCommand.COST,
+    "info": SlashCommand.STATUS,
+    "cls": SlashCommand.CLEAR,
 }
 
 
@@ -123,11 +129,31 @@ class SlashCommandParser:
         return SlashCommandResult(command=cmd, args=args, raw=raw)
 
 
-# Help text for /help — kept here so commands.py remains the single source of truth.
+# Help entries — structured so the renderer can present them as a styled
+# table. Each row is (canonical, aliases, description, category).
+HELP_ENTRIES: list[tuple[str, str, str, str]] = [
+    ("/help",     "/?, /h",          "Show this help",                          "Session"),
+    ("/status",   "/info",            "Show current build state",                "Session"),
+    ("/clear",    "/cls",             "Clear the screen (keeps transcript)",     "Session"),
+    ("/quit",     "/q, /exit",        "Exit the session",                        "Session"),
+    ("/done",     "/yes, /y, /draft", "Tell the current agent to commit",        "Workflow"),
+    ("/skip",     "",                 "Accept the current proposal and proceed", "Workflow"),
+    ("/back",     "/undo",            "Restore the previous checkpoint",         "Workflow"),
+    ("/restart",  "/reset",           "Start over from the beginning",           "Workflow"),
+    ("/show",     "",                 "Render: prd | architecture | code | tests", "Artifacts"),
+    ("/save",     "",                 "Save the current chat transcript",        "Artifacts"),
+    ("/model",    "",                 "Switch active LLM, or show current",      "Config"),
+    ("/cost",     "/tokens",          "Show running token and dollar cost",      "Config"),
+]
+
+
+# Plain-text help (kept for backward compatibility with tests / non-TTY use).
 HELP_TEXT = """\
 Available commands:
 
   /help, /?           Show this help
+  /status, /info      Show current build state
+  /clear, /cls        Clear the screen (keeps transcript)
   /quit, /q           Exit the session
   /done, /yes, /y     Tell the current agent to commit (e.g. draft the PRD)
   /skip               Accept the current proposal and proceed

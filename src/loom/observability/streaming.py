@@ -3,12 +3,12 @@
 Converts LangGraph astream_events to typed Loom events.
 """
 
-import asyncio
 import logging
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 from loom.state.enums import AgentRole, Phase
 

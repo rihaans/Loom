@@ -7,7 +7,7 @@ from typing import Any
 import tomli_w
 
 from loom.config.defaults import auto_detect_default
-from loom.config.models import LoomConfig, LLMConfig
+from loom.config.models import LLMConfig, LoomConfig
 from loom.state.enums import AgentRole
 
 # Try to import tomllib (Python 3.11+) or tomli

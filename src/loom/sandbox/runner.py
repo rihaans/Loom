@@ -5,11 +5,9 @@ Uses the Docker SDK to run code in isolated containers with resource limits.
 
 import logging
 import tarfile
-import tempfile
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import Any
 
 from loom.sandbox.models import (
     ExecutionStatus,
@@ -68,12 +66,12 @@ class SandboxRunner:
             # Test connection
             self._client.ping()
             logger.debug("Docker client initialized successfully")
-        except ImportError:
+        except ImportError as e:
             raise DockerNotAvailableError(
                 "Docker SDK not installed. Install with: pip install docker"
-            )
+            ) from e
         except Exception as e:
-            raise DockerNotAvailableError(f"Docker not available: {e}")
+            raise DockerNotAvailableError(f"Docker not available: {e}") from e
 
     def _ensure_image(self) -> bool:
         """Ensure the sandbox image exists.
@@ -323,7 +321,7 @@ class SandboxRunner:
 
         try:
             logger.info(f"Building sandbox image from {dockerfile_path}...")
-            image, logs = self._client.images.build(
+            _image, logs = self._client.images.build(
                 path=str(dockerfile_path.parent.parent),  # Project root
                 dockerfile=str(dockerfile_path),
                 tag=self.config.image,

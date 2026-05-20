@@ -5,9 +5,10 @@ Uses LangGraph's MemorySaver for in-process checkpoints and SqliteSaver for dura
 
 import logging
 import sqlite3
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -153,6 +154,7 @@ def generate_thread_id(description: str, timestamp: str | None = None) -> str:
         Unique thread ID string
     """
     from datetime import datetime
+
     from loom.output.slugify import slugify
 
     if timestamp is None:

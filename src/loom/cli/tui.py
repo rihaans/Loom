@@ -2,21 +2,20 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Label, Log, Static
 
 from loom.config import LoomConfig
 from loom.observability import BuildObserver, StreamEvent, StreamEventType
 from loom.state.enums import AgentRole, Priority
-
 
 # Agent display info
 AGENT_INFO = {
@@ -180,7 +179,7 @@ class BuildApp(App):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[tuple[str, str, str]]] = [
         ("q", "quit", "Quit"),
         ("s", "toggle_stats", "Stats"),
         ("e", "toggle_events", "Events"),

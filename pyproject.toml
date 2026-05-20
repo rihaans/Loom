@@ -71,9 +71,9 @@ memory = [
 loom = "loom.cli.app:app"
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/loom"
-Documentation = "https://github.com/YOUR_USERNAME/loom#readme"
-Repository = "https://github.com/YOUR_USERNAME/loom"
+Homepage = "https://github.com/rihaans/CodeCrew"
+Documentation = "https://github.com/rihaans/CodeCrew#readme"
+Repository = "https://github.com/rihaans/CodeCrew"
 
 [build-system]
 requires = ["hatchling"]
@@ -102,6 +102,14 @@ ignore = [
     "E501",   # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# CLI exit handlers show a friendly error message and then raise typer.Exit
+# to terminate the process. The original exception's traceback is not surfaced
+# to the user, so `raise ... from e` chaining adds noise without value.
+"src/loom/cli/app.py" = ["B904"]
+# Typer requires Argument/Option calls in function defaults — that's the API.
+"src/loom/cli/*.py" = ["B008"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["loom"]
 
@@ -123,6 +131,11 @@ mypy_path = "src"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Only collect test modules from the tests/ tree. This prevents pytest from
+# trying to collect Pydantic models named TestCase/TestReport in src/loom/state/models.py.
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 markers = [
     "slow: marks tests as slow",
     "e2e: marks tests as end-to-end (requires real LLM)",
@@ -130,6 +143,9 @@ markers = [
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
+    # Pydantic model names happen to start with Test* (TestCase, TestReport);
+    # pytest tries to collect them and warns. They're domain models, not tests.
+    "ignore:cannot collect test class.*has a __init__ constructor:pytest.PytestCollectionWarning",
 ]
 
 [tool.coverage.run]

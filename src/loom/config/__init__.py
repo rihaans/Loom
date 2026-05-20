@@ -6,18 +6,15 @@ from loom.config.defaults import (
     get_default_config,
 )
 from loom.config.loader import load_config, parse_llm_string, save_config
-from loom.config.models import LoomConfig, BuildResult, LLMConfig
+from loom.config.models import BuildResult, LLMConfig, LoomConfig
 
 __all__ = [
-    # Models
-    "LoomConfig",
     "BuildResult",
     "LLMConfig",
-    # Defaults
+    "LoomConfig",
     "auto_detect_default",
     "detect_available_provider",
     "get_default_config",
-    # Loader
     "load_config",
     "parse_llm_string",
     "save_config",

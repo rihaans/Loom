@@ -142,7 +142,7 @@ class SubprocessRunner:
                     truncated=truncated,
                 )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
                 return SandboxResult(
@@ -162,10 +162,11 @@ class SubprocessRunner:
             )
 
         finally:
-            # Clean up temp directory
-            if temp_dir and os.path.exists(temp_dir):
+            # Clean up temp directory (offload blocking I/O to a thread so we
+            # don't stall the event loop on slow filesystems).
+            if temp_dir:
                 try:
-                    shutil.rmtree(temp_dir)
+                    await asyncio.to_thread(shutil.rmtree, temp_dir, ignore_errors=True)
                 except Exception as e:
                     logger.warning(f"Failed to clean up temp dir: {e}")
 

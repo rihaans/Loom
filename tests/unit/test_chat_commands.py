@@ -1,6 +1,7 @@
 """Unit tests for the slash command parser (Phase 9.4)."""
 
 from loom.cli.chat.commands import (
+    HELP_ENTRIES,
     HELP_TEXT,
     SlashCommand,
     SlashCommandParser,
@@ -128,3 +129,44 @@ class TestHelpText:
         assert "/save" in HELP_TEXT
         assert "/model" in HELP_TEXT
         assert "/cost" in HELP_TEXT
+        assert "/status" in HELP_TEXT
+        assert "/clear" in HELP_TEXT
+
+
+class TestStatusCommand:
+    def test_status_canonical(self) -> None:
+        assert SlashCommandParser.parse("/status").command == SlashCommand.STATUS
+
+    def test_status_alias_info(self) -> None:
+        assert SlashCommandParser.parse("/info").command == SlashCommand.STATUS
+
+
+class TestClearCommand:
+    def test_clear_canonical(self) -> None:
+        assert SlashCommandParser.parse("/clear").command == SlashCommand.CLEAR
+
+    def test_clear_alias_cls(self) -> None:
+        assert SlashCommandParser.parse("/cls").command == SlashCommand.CLEAR
+
+
+class TestHelpEntries:
+    """The structured HELP_ENTRIES is what the renderer consumes."""
+
+    def test_entries_is_tuple_of_four(self) -> None:
+        for row in HELP_ENTRIES:
+            assert isinstance(row, tuple)
+            assert len(row) == 4  # canonical, aliases, description, category
+
+    def test_entries_contain_new_commands(self) -> None:
+        canonicals = {row[0] for row in HELP_ENTRIES}
+        assert "/status" in canonicals
+        assert "/clear" in canonicals
+        assert "/help" in canonicals
+        assert "/quit" in canonicals
+
+    def test_categories_are_consistent(self) -> None:
+        # Each entry belongs to one of a small set of known categories — guard
+        # against typos that would create one-row sections.
+        allowed = {"Session", "Workflow", "Artifacts", "Config"}
+        for row in HELP_ENTRIES:
+            assert row[3] in allowed, f"Unknown category: {row[3]}"

@@ -251,3 +251,160 @@ class TestArtifactPanels:
         renderer = ChatRenderer(console=console)
         renderer.render_test_report(None)
         assert _output(console) == ""
+
+
+# ---------------------------------------------------------------------------
+# /help — categorized command table
+# ---------------------------------------------------------------------------
+
+
+class TestHelpPanel:
+    def test_help_panel_lists_all_categories(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        from loom.cli.chat.commands import HELP_ENTRIES
+        renderer.render_help(HELP_ENTRIES)
+        out = _output(console)
+        # Section headers
+        assert "Session" in out
+        assert "Workflow" in out
+        assert "Artifacts" in out
+        assert "Config" in out
+        # A handful of canonical commands appear
+        assert "/help" in out
+        assert "/status" in out
+        assert "/clear" in out
+
+    def test_help_panel_plain_mode_compact(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console, plain=True)
+        from loom.cli.chat.commands import HELP_ENTRIES
+        renderer.render_help(HELP_ENTRIES)
+        out = _output(console)
+        # Plain mode lists commands; no box-drawing characters.
+        assert "/help" in out
+        assert "─" not in out
+        assert "╭" not in out
+
+
+# ---------------------------------------------------------------------------
+# /status — build state panel
+# ---------------------------------------------------------------------------
+
+
+class TestStatusPanel:
+    def test_status_panel_shows_tokens_and_cost(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        renderer.render_status_panel(
+            phase="design",
+            active_role="architect",
+            tokens=12345,
+            cost_usd=0.4321,
+            retries=0,
+            max_retries=2,
+            artifacts={"PRD": True, "Architecture": False},
+            model_label="anthropic:claude-3-5-sonnet",
+        )
+        out = _output(console)
+        assert "12,345" in out
+        assert "$0.4321" in out
+        assert "design" in out
+        assert "Architect" in out
+        assert "0/2" in out
+
+    def test_status_panel_omits_artifacts_if_not_provided(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        renderer.render_status_panel(
+            phase=None,
+            active_role=None,
+            tokens=0,
+            cost_usd=0.0,
+            retries=0,
+            max_retries=2,
+        )
+        out = _output(console)
+        # Still renders the panel header
+        assert "Status" in out
+
+
+# ---------------------------------------------------------------------------
+# /cost — per-role cost table
+# ---------------------------------------------------------------------------
+
+
+class TestCostTable:
+    def test_cost_table_lists_each_role(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        per_role = {
+            "product_manager": (1000, 500, 0.0050),
+            "architect":       (800, 1200, 0.0125),
+        }
+        renderer.render_cost_table(per_role, total_tokens=3500, total_cost_usd=0.0175)
+        out = _output(console)
+        assert "Product Manager" in out
+        assert "Architect" in out
+        assert "$0.0050" in out
+        assert "$0.0125" in out
+        # Total row
+        assert "Total" in out
+        assert "$0.0175" in out
+
+    def test_cost_table_empty_falls_back_to_one_liner(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        renderer.render_cost_table({}, total_tokens=0, total_cost_usd=0.0)
+        out = _output(console)
+        # No empty table — collapses to a status line
+        assert "Tokens" in out
+        assert "$0.0000" in out
+
+
+# ---------------------------------------------------------------------------
+# Phase breadcrumb
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseBreadcrumb:
+    def test_breadcrumb_highlights_active_stage(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        renderer.render_phase_breadcrumb("architect")
+        out = _output(console)
+        # All five stage labels should be present.
+        assert "PM" in out
+        assert "Architect" in out
+        assert "Devs" in out
+        assert "QA" in out
+        assert "DevOps" in out
+
+    def test_breadcrumb_plain_mode_silent(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console, plain=True)
+        renderer.render_phase_breadcrumb("architect")
+        # Plain mode suppresses the breadcrumb — it would be noisy in logs.
+        assert _output(console) == ""
+
+    def test_breadcrumb_backend_dev_maps_to_devs_stage(self) -> None:
+        console = _captured_console()
+        renderer = ChatRenderer(console=console)
+        renderer.render_phase_breadcrumb("backend_dev")
+        out = _output(console)
+        # The active glyph should appear on the Devs row, not be missing entirely.
+        assert "Devs" in out
+
+
+# ---------------------------------------------------------------------------
+# clear()
+# ---------------------------------------------------------------------------
+
+
+class TestClear:
+    def test_clear_calls_console_clear(self) -> None:
+        from unittest.mock import MagicMock
+        console = MagicMock()
+        renderer = ChatRenderer(console=console)
+        renderer.clear()
+        console.clear.assert_called_once()

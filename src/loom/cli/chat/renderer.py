@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any, ClassVar
 
 from rich.align import Align
-from rich.box import HEAVY, ROUNDED
+from rich.box import ROUNDED, SIMPLE
+from rich.columns import Columns
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
@@ -25,6 +27,7 @@ from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.spinner import Spinner
+from rich.table import Table
 from rich.text import Text
 
 logger = logging.getLogger(__name__)
@@ -75,7 +78,7 @@ def _gradient_logo() -> Text:
         "#ff5fd2",  # magenta
     ]
     out = Text()
-    for line, color in zip(_LOGO_LINES, colors):
+    for line, color in zip(_LOGO_LINES, colors, strict=True):
         out.append(line + "\n", style=f"bold {color}")
     return out
 
@@ -418,3 +421,272 @@ class ChatRenderer:
             Text(f"  {symbol}  Tests: {passed}/{total} passing",
                  style=f"bold {color}")
         )
+
+    # ---- Claude-Code-style panels --------------------------------------
+
+    def clear(self) -> None:
+        """Clear the terminal screen. Transcript on disk is untouched."""
+        # rich's clear() emits the right ANSI sequences for the host terminal.
+        self.console.clear()
+
+    def render_help(self, entries: list[tuple[str, str, str, str]]) -> None:
+        """Render the /help command reference as a categorized table.
+
+        Args:
+            entries: list of (canonical, aliases, description, category) tuples.
+                Typically supplied as `commands.HELP_ENTRIES`.
+        """
+        if self.plain:
+            # Plain mode: simple list, one command per line.
+            for canonical, aliases, desc, _cat in entries:
+                line = canonical
+                if aliases:
+                    line += f"  ({aliases})"
+                self.console.print(f"  {line:<32} {desc}")
+            self.console.print(
+                "\n  Anything else you type is a message to the active agent."
+            )
+            return
+
+        # Group entries by category, preserving insertion order.
+        by_cat: dict[str, list[tuple[str, str, str, str]]] = {}
+        for row in entries:
+            by_cat.setdefault(row[3], []).append(row)
+
+        groups: list[Any] = []
+        for cat, rows in by_cat.items():
+            table = Table(
+                box=SIMPLE,
+                show_header=False,
+                pad_edge=False,
+                padding=(0, 1),
+                expand=False,
+            )
+            table.add_column(style=BRAND_PRIMARY, no_wrap=True)
+            table.add_column(style="dim", no_wrap=True)
+            table.add_column(style="white")
+            for canonical, aliases, desc, _cat in rows:
+                table.add_row(canonical, aliases or "—", desc)
+
+            header = Text(cat, style=f"bold {BRAND_ACCENT}")
+            groups.append(Group(header, table, Text("")))
+
+        footer = Text()
+        footer.append("Anything else you type is a message to the active agent.\n",
+                      style="dim italic")
+        footer.append("Esc-Enter", style=BRAND_DIM)
+        footer.append(" inserts newline  ·  ", style="dim")
+        footer.append("Ctrl-C", style=BRAND_DIM)
+        footer.append(" abort step  ·  ", style="dim")
+        footer.append("Ctrl-D", style=BRAND_DIM)
+        footer.append(" exit", style="dim")
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                Padding(Group(*groups, footer), (0, 1)),
+                title=Text("Commands", style=f"bold {BRAND_PRIMARY}"),
+                title_align="left",
+                border_style=BRAND_MUTED,
+                box=ROUNDED,
+                expand=False,
+            )
+        )
+
+    def render_status_panel(
+        self,
+        *,
+        phase: str | None,
+        active_role: str | None,
+        tokens: int,
+        cost_usd: float,
+        retries: int,
+        max_retries: int,
+        artifacts: dict[str, bool] | None = None,
+        model_label: str | None = None,
+    ) -> None:
+        """Render `/status` — a compact at-a-glance view of the build state.
+
+        Args:
+            phase: Current pipeline phase (e.g. "design", "development").
+            active_role: Role key of the agent currently working / waiting.
+            tokens: Total tokens spent so far.
+            cost_usd: Total dollar cost so far.
+            retries: Number of QA-triggered dev retries used.
+            max_retries: Retry budget.
+            artifacts: Optional map of artifact name -> exists (e.g.
+                {"PRD": True, "Architecture": False, "Tests": False}).
+            model_label: Optional "provider:model" string.
+        """
+        # Left column: build state
+        left = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
+        left.add_column(style="dim", no_wrap=True)
+        left.add_column(style="white")
+
+        if phase:
+            left.add_row("Phase",  Text(phase, style=f"bold {BRAND_PRIMARY}"))
+        if active_role:
+            label, color = _AGENT_STYLES.get(active_role, (active_role, "white"))
+            left.add_row("Agent", Text(label, style=f"bold {color}"))
+        if model_label:
+            left.add_row("Model",  Text(model_label, style="white"))
+
+        retry_color = (
+            "red" if retries >= max_retries
+            else "yellow" if retries > 0
+            else "green"
+        )
+        left.add_row(
+            "Retries",
+            Text(f"{retries}/{max_retries}", style=f"bold {retry_color}"),
+        )
+        left.add_row("Tokens", Text(f"{tokens:,}", style="white"))
+        left.add_row("Cost",   Text(f"${cost_usd:.4f}", style="white"))
+
+        # Right column: artifact checklist (skipped if not provided)
+        right_renderable: Any | None = None
+        if artifacts:
+            right = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
+            right.add_column(no_wrap=True)
+            right.add_column(no_wrap=True)
+            for name, present in artifacts.items():
+                symbol = "✓" if present else "·"
+                color = "green" if present else "dim"
+                right.add_row(
+                    Text(symbol, style=f"bold {color}"),
+                    Text(name, style="white" if present else "dim"),
+                )
+            right_renderable = right
+
+        body = (
+            Columns([left, right_renderable], padding=(0, 4), expand=False)
+            if right_renderable is not None
+            else left
+        )
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                Padding(body, (0, 1)),
+                title=Text("Status", style=f"bold {BRAND_PRIMARY}"),
+                title_align="left",
+                border_style=BRAND_MUTED,
+                box=ROUNDED,
+                expand=False,
+            )
+        )
+
+    def render_cost_table(
+        self,
+        per_role: dict[str, tuple[int, int, float]],
+        total_tokens: int,
+        total_cost_usd: float,
+    ) -> None:
+        """Render `/cost` — a per-role breakdown table.
+
+        Args:
+            per_role: Mapping role_key -> (input_tokens, output_tokens, cost_usd).
+                Roles with zero activity should be omitted by the caller.
+            total_tokens: Sum of input+output across all roles.
+            total_cost_usd: Sum of cost across all roles.
+        """
+        if not per_role:
+            # Empty state — collapse into a one-liner so we don't print an empty panel.
+            self.render_status(
+                f"Tokens: {total_tokens:,}  ·  Cost: ${total_cost_usd:.4f}"
+            )
+            return
+
+        table = Table(
+            box=SIMPLE,
+            show_header=True,
+            header_style=f"bold {BRAND_DIM}",
+            padding=(0, 1),
+            expand=False,
+        )
+        table.add_column("Agent", style="white", no_wrap=True)
+        table.add_column("Input", justify="right", style="dim")
+        table.add_column("Output", justify="right", style="dim")
+        table.add_column("Cost", justify="right", style="white")
+
+        for role, (in_tok, out_tok, cost) in per_role.items():
+            label, color = _AGENT_STYLES.get(role, (role, "white"))
+            table.add_row(
+                Text(label, style=color),
+                f"{in_tok:,}",
+                f"{out_tok:,}",
+                f"${cost:.4f}",
+            )
+
+        # Total row
+        table.add_section()
+        table.add_row(
+            Text("Total", style=f"bold {BRAND_PRIMARY}"),
+            "",
+            f"{total_tokens:,}",
+            Text(f"${total_cost_usd:.4f}", style=f"bold {BRAND_PRIMARY}"),
+        )
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                table,
+                title=Text("Cost", style=f"bold {BRAND_PRIMARY}"),
+                title_align="left",
+                border_style=BRAND_MUTED,
+                box=ROUNDED,
+                expand=False,
+            )
+        )
+
+    # ---- Phase breadcrumb -------------------------------------------------
+
+    # Pipeline stages in order. Each entry is (label, role_key it represents).
+    _BREADCRUMB_STAGES: ClassVar[list[tuple[str, str]]] = [
+        ("PM",        "product_manager"),
+        ("Architect", "architect"),
+        ("Devs",      "frontend_dev"),   # represents the parallel dev fan-out
+        ("QA",        "qa_engineer"),
+        ("DevOps",    "devops_engineer"),
+    ]
+
+    def render_phase_breadcrumb(self, active_role: str | None) -> None:
+        """Render a single-line pipeline breadcrumb: PM → Architect → Devs → QA → DevOps.
+
+        The stage matching `active_role` is highlighted; earlier stages are
+        rendered as completed (✓), later stages as pending (dim).
+        """
+        if self.plain:
+            return
+
+        # Devs covers both frontend_dev and backend_dev — collapse.
+        norm = "frontend_dev" if active_role == "backend_dev" else active_role
+
+        # Find the active index. -1 if not in the pipeline (e.g. supervisor).
+        idx = -1
+        for i, (_label, role) in enumerate(self._BREADCRUMB_STAGES):
+            if role == norm:
+                idx = i
+                break
+
+        line = Text()
+        for i, (label, _role) in enumerate(self._BREADCRUMB_STAGES):
+            if idx == -1:
+                # No clear active stage — render everything dim.
+                style = "dim"
+                glyph = "·"
+            elif i < idx:
+                style = "green"
+                glyph = "✓"
+            elif i == idx:
+                style = f"bold {BRAND_PRIMARY}"
+                glyph = "●"
+            else:
+                style = "dim"
+                glyph = "○"
+            line.append(f" {glyph} ", style=style)
+            line.append(label, style=style)
+            if i < len(self._BREADCRUMB_STAGES) - 1:
+                line.append("  →", style="dim")
+
+        self.console.print(Padding(line, (0, 0, 1, 2)))

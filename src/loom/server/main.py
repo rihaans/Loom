@@ -5,7 +5,6 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -213,7 +212,7 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
                 if message.get("type") == "complete":
                     break
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send heartbeat
                 await websocket.send_json({
                     "type": "heartbeat",

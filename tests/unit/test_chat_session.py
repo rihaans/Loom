@@ -39,13 +39,68 @@ def _make_session(initial_values: dict[str, Any] | None = None) -> ChatSession:
 
 class TestSlashDispatch:
     @pytest.mark.asyncio
-    async def test_help_renders_help_text(self) -> None:
+    async def test_help_renders_help_panel(self) -> None:
         session = _make_session()
         cmd = SlashCommandResult(command=SlashCommand.HELP, args=[], raw="/help")
         result = await session._handle_slash(cmd, {})
         assert result is None
-        # Help text should have been printed (via console.print)
-        assert session.renderer.console.print.called
+        # /help now delegates to the renderer's structured table view
+        session.renderer.render_help.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_clear_invokes_renderer_clear(self) -> None:
+        session = _make_session()
+        cmd = SlashCommandResult(command=SlashCommand.CLEAR, args=[], raw="/clear")
+        result = await session._handle_slash(cmd, {})
+        assert result is None
+        session.renderer.clear.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_status_renders_status_panel(self) -> None:
+        session = _make_session()
+        cmd = SlashCommandResult(command=SlashCommand.STATUS, args=[], raw="/status")
+        # Pass a state with one cost entry so the panel has real numbers.
+        cost = MagicMock(input_tokens=100, output_tokens=200, cost_usd=0.01)
+        values = {
+            "costs": [cost],
+            "retry_count": 1,
+            "max_retries": 2,
+            "prd": None,
+            "architecture": None,
+            "code_files": {},
+            "test_report": None,
+        }
+        result = await session._handle_slash(cmd, values)
+        assert result is None
+        session.renderer.render_status_panel.assert_called_once()
+        kwargs = session.renderer.render_status_panel.call_args.kwargs
+        assert kwargs["tokens"] == 300
+        assert kwargs["retries"] == 1
+        assert kwargs["max_retries"] == 2
+
+    @pytest.mark.asyncio
+    async def test_cost_renders_per_role_table(self) -> None:
+        session = _make_session()
+        cmd = SlashCommandResult(command=SlashCommand.COST, args=[], raw="/cost")
+        # Two cost entries from different agents — should aggregate per role.
+        # `agent` is the canonical CostEntry field; the dispatcher prefers it.
+        c1 = MagicMock(
+            agent="product_manager", input_tokens=100,
+            output_tokens=50, cost_usd=0.001,
+        )
+        c2 = MagicMock(
+            agent="architect", input_tokens=200,
+            output_tokens=80, cost_usd=0.003,
+        )
+        await session._handle_slash(cmd, {"costs": [c1, c2]})
+        session.renderer.render_cost_table.assert_called_once()
+        args, _ = session.renderer.render_cost_table.call_args
+        per_role, total_tokens, total_cost = args
+        assert set(per_role.keys()) == {"product_manager", "architect"}
+        assert per_role["product_manager"] == (100, 50, 0.001)
+        assert per_role["architect"] == (200, 80, 0.003)
+        assert total_tokens == 430
+        assert abs(total_cost - 0.004) < 1e-9
 
     @pytest.mark.asyncio
     async def test_quit_returns_exit(self) -> None:
@@ -111,9 +166,10 @@ class TestSlashDispatch:
         session.renderer.render_error.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_cost_renders_status(self) -> None:
-        from loom.state.models import CostEntry
+    async def test_cost_renders_table_with_real_cost_entry(self) -> None:
+        """Smoke test the dispatch path with the real CostEntry model."""
         from loom.state.enums import AgentRole
+        from loom.state.models import CostEntry
         session = _make_session()
         costs = [
             CostEntry(
@@ -126,7 +182,13 @@ class TestSlashDispatch:
         ]
         cmd = SlashCommandResult(command=SlashCommand.COST, args=[], raw="/cost")
         await session._handle_slash(cmd, {"costs": costs})
-        session.renderer.render_status.assert_called_once()
+        session.renderer.render_cost_table.assert_called_once()
+        # Per-role dict should be keyed by the CostEntry's `agent` field value.
+        per_role, total_tokens, total_cost = session.renderer.render_cost_table.call_args[0]
+        # AgentRole values are lowercased role keys (e.g. "product_manager")
+        assert AgentRole.PRODUCT_MANAGER.value in per_role
+        assert total_tokens == 150
+        assert abs(total_cost - 0.0123) < 1e-9
 
     @pytest.mark.asyncio
     async def test_unknown_command_renders_error(self) -> None:

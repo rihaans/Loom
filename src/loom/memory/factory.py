@@ -20,7 +20,7 @@ _embedder: Embedder | None = None
 _store: MemoryStore | None = None
 
 
-def get_memory_config(config: "LoomConfig") -> MemoryConfig:
+def get_memory_config(config: LoomConfig) -> MemoryConfig:
     """Extract memory config from main config.
 
     Args:

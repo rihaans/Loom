@@ -1,6 +1,6 @@
 """Loom - Autonomous software development team built on LangGraph."""
 
-from loom.config import LoomConfig, BuildResult, LLMConfig
+from loom.config import BuildResult, LLMConfig, LoomConfig
 from loom.core import build, build_sync, resume_build, resume_build_sync
 from loom.state import (
     PRD,
@@ -16,12 +16,12 @@ __version__ = "0.1.0"
 
 __all__ = [
     "PRD",
-    "LoomConfig",
     "AgentRole",
     "AgentState",
     "ArchitectureDoc",
     "BuildResult",
     "LLMConfig",
+    "LoomConfig",
     "Phase",
     "Priority",
     "ProjectType",

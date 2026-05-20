@@ -62,7 +62,7 @@ def merge_dev_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             merged_costs.extend(result["costs"])
 
         # Capture any error
-        if "error" in result and result["error"]:
+        if result.get("error"):
             if error:
                 error = f"{error}; {result['error']}"
             else:

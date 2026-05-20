@@ -74,7 +74,7 @@ def _extract_files_from_bundles(code_files: dict[str, Any]) -> dict[str, str]:
         Dict of file_path -> content
     """
     files: dict[str, str] = {}
-    for bundle_name, bundle in code_files.items():
+    for bundle in code_files.values():
         if hasattr(bundle, "files"):
             for code_file in bundle.files:
                 files[code_file.path] = code_file.content
