@@ -2,14 +2,16 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from loom._time import now_utc
 from loom.config import load_config, parse_llm_string
 from loom.server.models import (
     ArtifactResponse,
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     logger.info("Starting Loom server")
     yield
@@ -92,14 +94,9 @@ async def list_runs() -> list[RunSummary]:
             status=run.status,
             started_at=run.started_at,
             duration_seconds=(
-                (run.completed_at - run.started_at).total_seconds()
-                if run.completed_at
-                else None
+                (run.completed_at - run.started_at).total_seconds() if run.completed_at else None
             ),
-            total_tokens=sum(
-                c.input_tokens + c.output_tokens
-                for c in run.state.get("costs", [])
-            ),
+            total_tokens=sum(c.input_tokens + c.output_tokens for c in run.state.get("costs", [])),
             total_cost_usd=sum(c.cost_usd for c in run.state.get("costs", [])),
         )
         for run in runs
@@ -160,10 +157,7 @@ async def get_artifact(run_id: str, artifact_type: str) -> ArtifactResponse:
         content = content.model_dump()
     elif isinstance(content, dict):
         # Handle nested Pydantic models
-        content = {
-            k: v.model_dump() if hasattr(v, "model_dump") else v
-            for k, v in content.items()
-        }
+        content = {k: v.model_dump() if hasattr(v, "model_dump") else v for k, v in content.items()}
 
     return ArtifactResponse(
         type=artifact_type,
@@ -178,7 +172,7 @@ async def get_artifact(run_id: str, artifact_type: str) -> ArtifactResponse:
 
 
 @app.websocket("/ws/{run_id}")
-async def websocket_endpoint(websocket: WebSocket, run_id: str):
+async def websocket_endpoint(websocket: WebSocket, run_id: str) -> None:
     """WebSocket endpoint for real-time build updates."""
     runner = get_runner()
     run = runner.get_run(run_id)
@@ -192,15 +186,17 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
 
     try:
         # Send current status
-        await websocket.send_json({
-            "type": "status",
-            "data": {
-                "status": run.status,
-                "progress": run.progress,
-                "current_agent": run.current_agent,
-            },
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        await websocket.send_json(
+            {
+                "type": "status",
+                "data": {
+                    "status": run.status,
+                    "progress": run.progress,
+                    "current_agent": run.current_agent,
+                },
+                "timestamp": now_utc().isoformat(),
+            }
+        )
 
         # Stream events
         while True:
@@ -214,10 +210,12 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
 
             except TimeoutError:
                 # Send heartbeat
-                await websocket.send_json({
-                    "type": "heartbeat",
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "heartbeat",
+                        "timestamp": now_utc().isoformat(),
+                    }
+                )
 
     except WebSocketDisconnect:
         logger.debug(f"WebSocket disconnected for run {run_id}")
@@ -231,9 +229,9 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
 
 
 @app.get("/api/health")
-async def health_check():
+async def health_check() -> dict[str, Any]:
     """Health check endpoint."""
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "timestamp": now_utc().isoformat()}
 
 
 # =============================================================================

@@ -1,11 +1,11 @@
 """Plan serialization for saving and loading plans."""
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from loom import __version__
+from loom._time import now_utc
 from loom.cost.estimator import estimate_build_cost, estimate_duration
 
 
@@ -40,7 +40,9 @@ def save_plan(
     # Serialize architecture
     arch_data = None
     if architecture is not None:
-        arch_data = architecture.model_dump() if hasattr(architecture, "model_dump") else dict(architecture)
+        arch_data = (
+            architecture.model_dump() if hasattr(architecture, "model_dump") else dict(architecture)
+        )
 
     # Serialize memory context
     memory_data = None
@@ -68,7 +70,7 @@ def save_plan(
 
     plan_data = {
         "version": 1,
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": now_utc().isoformat() + "Z",
         "loom_version": __version__,
         "thread_id": thread_id,
         "description": description,
@@ -110,7 +112,7 @@ def load_plan(path: Path) -> dict[str, Any]:
         raise FileNotFoundError(f"Plan file not found: {path}")
 
     with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+        data: dict[str, Any] = json.load(f)
 
     # Validate version
     version = data.get("version", 0)
@@ -141,7 +143,7 @@ def default_plan_path(state: dict[str, Any]) -> Path:
     else:
         slug = "plan"
 
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = now_utc().strftime("%Y-%m-%d")
     filename = f"{slug}-{date_str}.json"
 
     # Find unique filename

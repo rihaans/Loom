@@ -8,6 +8,7 @@ import tarfile
 import time
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from loom.sandbox.models import (
     ExecutionStatus,
@@ -54,7 +55,8 @@ class SandboxRunner:
             DockerNotAvailableError: If Docker is not available.
         """
         self.config = config or SandboxConfig()
-        self._client = None
+        # Docker SDK client, created lazily; typed Any since the SDK ships no stubs.
+        self._client: Any = None
         self._initialize_docker()
 
     def _initialize_docker(self) -> None:
@@ -62,7 +64,7 @@ class SandboxRunner:
         try:
             import docker
 
-            self._client = docker.from_env()
+            self._client = docker.from_env()  # type: ignore[attr-defined]
             # Test connection
             self._client.ping()
             logger.debug("Docker client initialized successfully")
@@ -150,9 +152,7 @@ class SandboxRunner:
 
         # Run in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self._run_sync(command, files, env)
-        )
+        return await loop.run_in_executor(None, lambda: self._run_sync(command, files, env))
 
     def _run_sync(
         self,
@@ -252,7 +252,11 @@ class SandboxRunner:
                 stderr=stderr,
                 duration_seconds=duration,
                 truncated=stdout_truncated or stderr_truncated,
-                error=None if status == ExecutionStatus.SUCCESS else stderr[:500] if stderr else None,
+                error=None
+                if status == ExecutionStatus.SUCCESS
+                else stderr[:500]
+                if stderr
+                else None,
             )
 
         except Exception as e:

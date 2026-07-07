@@ -8,6 +8,7 @@ from typing import Any, TypeVar
 
 try:
     from langchain_core.messages import BaseMessage  # noqa: F401 — availability check
+
     _HAS_LANGCHAIN = True
 except ImportError:
     _HAS_LANGCHAIN = False

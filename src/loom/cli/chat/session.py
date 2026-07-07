@@ -43,18 +43,50 @@ from loom.state.enums import AgentRole
 # asked something like "want me to draft?" — treats plain "yes" as /done so
 # users don't have to remember the slash-command form.
 _AFFIRMATIVE_INPUTS = {
-    "y", "yes", "yeah", "yep", "yup", "yea", "ya",
-    "ok", "okay", "k", "sure", "fine",
-    "go", "go ahead", "do it", "ship it",
-    "draft", "draft it", "draft the prd", "draft now",
-    "done", "looks good", "lgtm", "perfect", "great",
-    "please", "please do",
+    "y",
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "yea",
+    "ya",
+    "ok",
+    "okay",
+    "k",
+    "sure",
+    "fine",
+    "go",
+    "go ahead",
+    "do it",
+    "ship it",
+    "draft",
+    "draft it",
+    "draft the prd",
+    "draft now",
+    "done",
+    "looks good",
+    "lgtm",
+    "perfect",
+    "great",
+    "please",
+    "please do",
 }
 
 # Words that indicate affirmative intent at the start of a longer reply.
 _AFFIRMATIVE_PREFIXES = {
-    "yes", "yeah", "yep", "yup", "ok", "okay", "sure",
-    "go", "draft", "do", "done", "perfect", "great",
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "ok",
+    "okay",
+    "sure",
+    "go",
+    "draft",
+    "do",
+    "done",
+    "perfect",
+    "great",
 }
 
 
@@ -133,9 +165,7 @@ class ChatSession:
             The final graph state values.
         """
         self._render_startup_banner()
-        self._graph = compile_graph(
-            self.config, checkpointer=self.checkpointer, interactive=True
-        )
+        self._graph = compile_graph(self.config, checkpointer=self.checkpointer, interactive=True)
 
         # Step 1: Get the user's first message — this becomes state.description
         first_input = initial_input or await self._read_input()
@@ -164,7 +194,7 @@ class ChatSession:
         # Main loop: render, read, dispatch
         while True:
             snapshot = await self._graph.aget_state(self.thread_config)
-            values = snapshot.values
+            values: dict[str, Any] = snapshot.values
 
             if os.environ.get("LOOM_CHAT_DEBUG"):
                 self.renderer.console.print(
@@ -187,9 +217,7 @@ class ChatSession:
                     hint="You can retry by typing again, or /quit to exit.",
                 )
                 # Clear the error so we don't keep showing it.
-                await self._graph.aupdate_state(
-                    self.thread_config, {"error": None}
-                )
+                await self._graph.aupdate_state(self.thread_config, {"error": None})
 
             # If the graph is no longer paused for input, it's either done or running
             if not is_paused_for_input(values):
@@ -219,9 +247,7 @@ class ChatSession:
                     return values
                 # Graph wants to advance — resume it with a thinking spinner
                 try:
-                    with self.renderer.thinking(
-                        self._thinking_label_for_phase(values)
-                    ):
+                    with self.renderer.thinking(self._thinking_label_for_phase(values)):
                         await self._graph.ainvoke(None, config=self.thread_config)
                     continue
                 except Exception as e:
@@ -299,9 +325,7 @@ class ChatSession:
 
     # ---- Slash command dispatch ----------------------------------------
 
-    async def _handle_slash(
-        self, cmd: SlashCommandResult, values: dict[str, Any]
-    ) -> str | None:
+    async def _handle_slash(self, cmd: SlashCommandResult, values: dict[str, Any]) -> str | None:
         """Handle a slash command.
 
         Returns:
@@ -361,9 +385,7 @@ class ChatSession:
 
     def _handle_show(self, cmd: SlashCommandResult, values: dict[str, Any]) -> None:
         if not cmd.args:
-            self.renderer.render_error(
-                "Usage: /show <prd|architecture|code|tests>"
-            )
+            self.renderer.render_error("Usage: /show <prd|architecture|code|tests>")
             return
         what = cmd.args[0].lower()
         if what == "prd":
@@ -412,8 +434,7 @@ class ChatSession:
 
         # Convert micro-cost back to dollars and tuple-ify for the renderer.
         per_role_out: dict[str, tuple[int, int, float]] = {
-            role: (vals[0], vals[1], vals[2] / 1_000_000)
-            for role, vals in per_role.items()
+            role: (vals[0], vals[1], vals[2] / 1_000_000) for role, vals in per_role.items()
         }
         total_tokens = sum(v[0] + v[1] for v in per_role_out.values())
         total_cost = sum(v[2] for v in per_role_out.values())
@@ -425,8 +446,7 @@ class ChatSession:
         costs = values.get("costs", [])
         total_cost = sum(float(getattr(c, "cost_usd", 0.0) or 0.0) for c in costs)
         total_tokens = sum(
-            int(getattr(c, "input_tokens", 0) or 0)
-            + int(getattr(c, "output_tokens", 0) or 0)
+            int(getattr(c, "input_tokens", 0) or 0) + int(getattr(c, "output_tokens", 0) or 0)
             for c in costs
         )
 
@@ -437,11 +457,11 @@ class ChatSession:
         model_label = f"{llm.provider}:{llm.model}"
 
         artifacts = {
-            "PRD":          values.get("prd") is not None,
+            "PRD": values.get("prd") is not None,
             "Architecture": values.get("architecture") is not None,
-            "Code":         bool(values.get("code_files")),
-            "Tests":        values.get("test_report") is not None,
-            "DevOps":       values.get("devops_files") is not None,
+            "Code": bool(values.get("code_files")),
+            "Tests": values.get("test_report") is not None,
+            "DevOps": values.get("devops_files") is not None,
         }
 
         self.renderer.render_status_panel(
@@ -471,6 +491,7 @@ class ChatSession:
             "architect": "architect is designing",
             "frontend_dev": "frontend dev is coding",
             "backend_dev": "backend dev is coding",
+            "code_reviewer": "reviewer is critiquing the code",
             "qa_engineer": "QA is running tests",
             "devops_engineer": "DevOps is packaging",
         }
@@ -478,6 +499,7 @@ class ChatSession:
 
     def _render_startup_banner(self) -> None:
         from loom import __version__ as loom_version
+
         llm = self.config.llm_default
         model_label = f"{llm.provider}:{llm.model}"
         self.renderer.render_banner(loom_version, model_label)
@@ -487,10 +509,25 @@ class ChatSession:
         costs = values.get("costs", [])
         total_cost = sum(getattr(c, "cost_usd", 0.0) for c in costs)
         total_tokens = sum(
-            getattr(c, "input_tokens", 0) + getattr(c, "output_tokens", 0)
-            for c in costs
+            getattr(c, "input_tokens", 0) + getattr(c, "output_tokens", 0) for c in costs
         )
-        self.renderer.render_completion(str(output_dir), total_cost, total_tokens)
+
+        # Surface the Code Reviewer's verdict before the final summary so the
+        # generator-critic loop is visible in the autonomous build phase.
+        review_report = values.get("review_report")
+        if review_report is not None:
+            self.renderer.render_review_panel(review_report)
+
+        code_files = values.get("code_files", {}) or {}
+        file_count = sum(len(b.files) for b in code_files.values() if hasattr(b, "files"))
+        self.renderer.render_completion(
+            str(output_dir),
+            total_cost,
+            total_tokens,
+            test_report=values.get("test_report"),
+            review_report=review_report,
+            files=file_count or None,
+        )
 
     async def _render_new_agent_messages(self, values: dict[str, Any]) -> None:
         """Render any agent messages we haven't shown yet — animated.
@@ -514,9 +551,7 @@ class ChatSession:
             for msg in new_msgs:
                 if isinstance(msg, AIMessage):
                     self.renderer.render_agent_speaker(role_key)
-                    await self.renderer.render_agent_message_animated(
-                        role_key, msg.content
-                    )
+                    await self.renderer.render_agent_message_animated(role_key, str(msg.content))
                     append_event(
                         self._transcript_path,
                         {

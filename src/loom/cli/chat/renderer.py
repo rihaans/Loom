@@ -1,32 +1,28 @@
 """Rich-based renderer for the chat REPL.
 
-Owns all visual output:
-  - Big LOOM banner on session start
-  - User message echo
-  - Agent speaker headers and message bodies
-  - Artifact panels (PRD, ArchitectureDoc, code summary, test report)
-  - Progress bars for parallel execution
-  - Error and completion footers
+A deliberately restrained, premium look: near-monochrome on a dark ground with a
+single soft accent, generous whitespace, and one quiet nod to the name — a woven
+"thread" hairline. No rainbows, no boxes-everywhere.
 """
 
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
+import os
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any, ClassVar
 
-from rich.align import Align
-from rich.box import ROUNDED, SIMPLE
+from rich.box import ROUNDED, Box
 from rich.columns import Columns
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.panel import Panel
-from rich.rule import Rule
-from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
@@ -34,53 +30,127 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Brand colors
+# Palette — monochrome + one soft accent
 # ---------------------------------------------------------------------------
+C_INK = "#ecedf0"  # primary text
+C_SOFT = "#a2a7b0"  # secondary text
+C_MUTED = "#6a707a"  # labels / tertiary
+C_FAINT = "#454a53"  # dim hints / dividers
+C_LINE = "#2a2e36"  # borders / dividers
+C_ACCENT = "#c9b68c"  # the single accent — soft champagne
+C_ACCENT_HI = "#e6d9b0"  # light gold (sheen highlight)
+C_ACCENT_LO = "#a68f63"  # deep gold (sheen low)
+C_RAIL = "#5a4f38"  # dim gold thread (message rails)
+C_OK = "#8fb08a"  # muted sage (success)
+C_WARN = "#cbae74"  # muted amber (warning)
+C_ERR = "#c58a8a"  # muted rose (error)
 
-# Loom uses a cool gradient (cyan → magenta) — symbolic of the "weave"
-# happening between agents.
-BRAND_PRIMARY = "bold #00d9ff"   # bright cyan
-BRAND_ACCENT = "bold #ff5fd2"    # bright magenta
-BRAND_DIM = "dim #88c0d0"
-BRAND_MUTED = "#5e81ac"
+# A narrow warm sheen used on the wordmark — gold foil, not a rainbow.
+WARM = [C_ACCENT_HI, C_ACCENT, C_ACCENT_LO, C_ACCENT]
 
-# ASCII logo — "ANSI Shadow" font
-_LOGO_LINES = [
-    "██╗      ██████╗  ██████╗ ███╗   ███╗",
-    "██║     ██╔═══██╗██╔═══██╗████╗ ████║",
-    "██║     ██║   ██║██║   ██║██╔████╔██║",
-    "██║     ██║   ██║██║   ██║██║╚██╔╝██║",
-    "███████╗╚██████╔╝╚██████╔╝██║ ╚═╝ ██║",
-    "╚══════╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝",
-]
 
-# Per-agent visual style: (emoji+label, role color, accent border)
-_AGENT_STYLES: dict[str, tuple[str, str]] = {
-    "product_manager": ("📋  Product Manager", "#00d9ff"),
-    "architect":       ("🏗   Architect",       "#ff5fd2"),
-    "frontend_dev":    ("💻  Frontend Dev",     "#88c0d0"),
-    "backend_dev":     ("⚙   Backend Dev",      "#a3be8c"),
-    "qa_engineer":     ("🧪  QA Engineer",      "#ebcb8b"),
-    "devops_engineer": ("🚀  DevOps",           "#b48ead"),
-    "supervisor":      ("🎯  Supervisor",       "white"),
+def _warm(pos: float) -> str:
+    """Interpolate the warm gold sheen (pos 0..1)."""
+    pos = max(0.0, min(1.0, pos))
+    x = pos * (len(WARM) - 1)
+    i = min(int(x), len(WARM) - 2)
+    t = x - i
+    a = tuple(int(WARM[i][k : k + 2], 16) for k in (1, 3, 5))
+    b = tuple(int(WARM[i + 1][k : k + 2], 16) for k in (1, 3, 5))
+    r, g, bl = (round(a[j] + (b[j] - a[j]) * t) for j in range(3))
+    return f"#{r:02x}{g:02x}{bl:02x}"
+
+# Back-compat aliases (referenced by a few older call sites / tests).
+BRAND_PRIMARY = f"bold {C_ACCENT}"
+BRAND_ACCENT = f"bold {C_ACCENT}"
+BRAND_DIM = f"dim {C_SOFT}"
+BRAND_MUTED = C_MUTED
+
+# Agent identity is name-only now (monochrome). The tuple shape is kept for
+# call-site compatibility; the colour is unused in the restrained theme.
+_AGENT_STYLES: dict[str, tuple[str, str, str]] = {
+    "product_manager": ("◇", "Product Manager", C_ACCENT),
+    "architect": ("◇", "Architect", C_ACCENT),
+    "frontend_dev": ("◇", "Frontend Dev", C_ACCENT),
+    "backend_dev": ("◇", "Backend Dev", C_ACCENT),
+    "code_reviewer": ("◇", "Code Reviewer", C_ACCENT),
+    "qa_engineer": ("◇", "QA Engineer", C_ACCENT),
+    "devops_engineer": ("◇", "DevOps", C_ACCENT),
+    "supervisor": ("◇", "Supervisor", C_ACCENT),
 }
 
+# Slash-command categories all share the accent now (kept for input.py sync).
+CAT_COLORS = {"session": C_ACCENT, "workflow": C_ACCENT, "artifacts": C_ACCENT, "config": C_ACCENT}
 
-def _gradient_logo() -> Text:
-    """Build the LOOM logo as a Text object with a cyan-to-magenta gradient."""
-    # Six gradient stops across six lines of the logo.
-    colors = [
-        "#00d9ff",  # cyan
-        "#33cdff",
-        "#7ab9ff",
-        "#c79bff",
-        "#f176f3",
-        "#ff5fd2",  # magenta
-    ]
+# A box that draws ONLY a thin left rail — a quiet gutter beside a message.
+LEFT_RAIL = Box("    \n▏   \n    \n▏   \n    \n    \n▏   \n    \n")
+
+
+def _agent(role_key: str) -> tuple[str, str, str]:
+    """(mark, label, colour) for a role, with a safe fallback."""
+    return _AGENT_STYLES.get(role_key, ("◇", role_key, C_ACCENT))
+
+
+def _thread(width: int, reveal: float = 1.0) -> Text:
+    """The one flourish: a fine woven hairline that starts as a lit accent thread
+    and settles into a dim rule. ``reveal`` (0..1) draws it left→right."""
     out = Text()
-    for line, color in zip(_LOGO_LINES, colors, strict=True):
-        out.append(line + "\n", style=f"bold {color}")
+    lit = round(reveal * width)
+    for i in range(width):
+        if i >= lit:
+            break
+        # a short bright head, fading back into a faint rule
+        if lit - i <= 2 and reveal < 1.0:
+            out.append("─", style=f"bold {C_ACCENT}")
+        elif i < 10:
+            out.append("─", style=C_ACCENT)
+        else:
+            out.append("─", style=C_FAINT)
     return out
+
+
+# A compact, flat wordmark — "loom" in a clean half-block font, one accent colour.
+_WM = [
+    "█    ▄▄▄  ▄▄▄  █▄ ▄█",
+    "█    █ █  █ █  █ █ █",
+    "█▄▄  ▀▀▀  ▀▀▀  █   █",
+]
+
+
+def _wordmark() -> Text:
+    """The wordmark with a subtle horizontal gold sheen (foil, not rainbow)."""
+    width = max(len(line) for line in _WM)
+    out = Text()
+    for i, line in enumerate(_WM):
+        for c, ch in enumerate(line):
+            if ch == " ":
+                out.append(" ")
+            else:
+                out.append(ch, style=f"bold {_warm(c / width)}")
+        if i < len(_WM) - 1:
+            out.append("\n")
+    return out
+
+
+class _ThinkingIndicator:
+    """A quiet loading line: a single braille spinner + label + elapsed seconds."""
+
+    _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        self._start = time.monotonic()
+        self._frame = itertools.count()
+
+    def __rich__(self) -> Text:
+        i = next(self._frame)
+        line = Text("  ")
+        line.append(self._FRAMES[i % len(self._FRAMES)], style=C_ACCENT)
+        line.append(f"  {self.message}", style=C_SOFT)
+        elapsed = time.monotonic() - self._start
+        if elapsed >= 1:
+            line.append(f"   {elapsed:.0f}s", style=C_FAINT)
+        return line
 
 
 class ChatRenderer:
@@ -94,404 +164,420 @@ class ChatRenderer:
     # ---- Banner / footer ------------------------------------------------
 
     def render_banner(self, version: str, model_label: str) -> None:
-        """Render the startup banner with the big LOOM logo."""
+        """Render a minimal, premium welcome card."""
         if self.plain:
-            self.console.print("LOOM", style="bold")
+            self.console.print("Loom", style="bold")
             self.console.print(f"v{version} · {model_label}", style="dim")
             self.console.print("Type your idea, or /help for commands.")
             self.console.print()
             return
 
-        # Logo with gradient
-        logo = _gradient_logo()
+        if getattr(self.console, "is_terminal", False):
+            self._animate_intro()
 
-        # Tagline
-        tagline = Text()
-        tagline.append("your AI software team", style=f"italic {BRAND_DIM}")
+        self.console.print()
+        self.console.print(self._banner_card(version, model_label))
+        self.console.print()
 
-        # Meta line: version · model
-        meta = Text()
-        meta.append(f"v{version}", style=BRAND_MUTED)
-        meta.append("  ·  ", style="dim")
-        meta.append(model_label, style=BRAND_MUTED)
+    def _banner_card(self, version: str, model_label: str) -> Panel:
+        cwd = os.getcwd()
+        home = os.path.expanduser("~")
+        if cwd.startswith(home):
+            cwd = "~" + cwd[len(home) :]
 
-        # Help line
-        help_line = Text()
-        help_line.append("Type your idea, or ", style="white")
-        help_line.append("/help", style=BRAND_PRIMARY)
-        help_line.append(" for commands\n", style="white")
-        help_line.append("Ctrl+C", style="dim")
-        help_line.append(" abort step  ·  ", style="dim")
-        help_line.append("Ctrl+D", style="dim")
-        help_line.append(" exit", style="dim")
+        def kv(key: str, val: str, val_style: str = C_SOFT) -> Text:
+            t = Text(f"{key:<7}", style=C_MUTED)
+            t.append(val, style=val_style)
+            return t
 
-        # Stack vertically with proper spacing
-        body = Group(
-            Align.center(logo),
-            Align.center(tagline),
+        # Left column — brand + environment.
+        left = Group(
+            _wordmark(),
+            _thread(19),
             Text(""),
-            Align.center(meta),
+            Text("your autonomous software team", style=C_SOFT),
+            Text("idea in — working, tested build out", style=C_MUTED),
             Text(""),
-            Rule(style=BRAND_MUTED),
-            Text(""),
-            Align.center(help_line),
+            kv("model", model_label),
+            kv("dir", cwd),
         )
 
-        # Panel wraps everything with a rounded border in brand cyan
-        self.console.print()
-        self.console.print(
-            Panel(
-                Padding(body, (1, 4)),
-                border_style=BRAND_PRIMARY,
-                box=ROUNDED,
-                padding=(0, 0),
-            )
+        # Right column — how to start + the cast (name-only, no colour noise).
+        def bullet(s: str) -> Text:
+            t = Text("· ", style=C_ACCENT)
+            t.append(s, style=C_SOFT)
+            return t
+
+        team_rows = []
+        row: Text | None = None
+        for i, (_key, (mark, label, _c)) in enumerate(
+            (k, v) for k, v in _AGENT_STYLES.items() if k != "supervisor"
+        ):
+            if i % 2 == 0:
+                row = Text()
+                team_rows.append(row)
+            assert row is not None
+            row.append(f"{mark} ", style=C_ACCENT)
+            row.append(f"{label:<16}", style=C_SOFT)
+
+        right = Group(
+            Text("GETTING STARTED", style=f"bold {C_ACCENT}"),
+            bullet("Type an idea — the team scopes, builds & tests it"),
+            bullet("/help  ·  /plan to preview cost  ·  /status"),
+            Text(""),
+            Text("THE TEAM", style=f"bold {C_ACCENT}"),
+            *team_rows,
         )
-        self.console.print()
+
+        foot = Text("Type an idea to begin", style=C_MUTED)
+        foot.append("      ", style=C_FAINT)
+        foot.append("Ctrl-D", style=C_MUTED)
+        foot.append(" to exit", style=C_FAINT)
+
+        # Two columns on wide terminals; stack to one column on narrow ones so it
+        # never overflows (e.g. an 80-col session).
+        if self.console.width >= 96:
+            grid = Table.grid(padding=(0, 7))
+            grid.add_column()
+            grid.add_column()
+            grid.add_row(left, right)
+            body: Any = Group(grid, _thread(58), foot)
+        else:
+            body = Group(left, Text(""), right, Text(""), _thread(40), foot)
+
+        title = Text(" loom ", style=f"bold {C_ACCENT}")
+        title.append(f"v{version} ", style=C_FAINT)
+        return Panel(
+            Padding(body, (1, 4)),
+            title=title,
+            title_align="left",
+            border_style=C_LINE,
+            box=ROUNDED,
+            padding=0,
+        )
+
+    def _animate_intro(self) -> None:
+        """A quiet thread weaves across, then the card lands. Interruptible."""
+        try:
+            with Live(Text(""), console=self.console, refresh_per_second=60, transient=True) as live:
+                self.console.print()
+                for k in range(21):
+                    live.update(Padding(_thread(40, k / 20), (1, 0, 1, 4)))
+                    time.sleep(0.02)
+        except (KeyboardInterrupt, Exception):
+            return
 
     def render_completion(
-        self, output_dir: str, total_cost: float, total_tokens: int
+        self,
+        output_dir: str,
+        total_cost: float,
+        total_tokens: int,
+        *,
+        test_report: Any | None = None,
+        review_report: Any | None = None,
+        files: int | None = None,
     ) -> None:
-        """Render the build-complete footer."""
+        """Render the build-complete summary as a quiet section."""
+
+        def row(body: Text, label: str, value: str, style: str) -> None:
+            body.append(f"{label:<8}", style=C_MUTED)
+            body.append(f"{value}\n", style=style)
+
         body = Text()
-        body.append("✓ Build complete\n\n", style="bold green")
-        body.append("Output:  ", style="dim")
-        body.append(f"{output_dir}\n", style=BRAND_PRIMARY)
-        body.append("Tokens:  ", style="dim")
-        body.append(f"{total_tokens:,}\n", style="white")
-        body.append("Cost:    ", style="dim")
-        body.append(f"${total_cost:.4f}", style="white")
-        self.console.print()
-        self.console.print(
-            Panel(
-                Padding(body, (0, 2)),
-                border_style="green",
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+        for i, (label, _role) in enumerate(self._BREADCRUMB_STAGES):
+            body.append("✓ ", style=C_OK)
+            body.append(label, style=C_SOFT)
+            if i < len(self._BREADCRUMB_STAGES) - 1:
+                body.append("  ·  ", style=C_LINE)
+        body.append("\n\n")
+
+        row(body, "Output", output_dir, C_ACCENT)
+        if files is not None:
+            row(body, "Files", str(files), C_INK)
+        if test_report is not None:
+            passed = getattr(test_report, "passed", 0)
+            total = getattr(test_report, "total", 0)
+            ok = passed == total and total > 0
+            row(body, "Tests", f"{passed}/{total} passing", C_OK if ok else C_WARN)
+        if review_report is not None:
+            approved = getattr(review_report, "approved", False)
+            row(body, "Review", "approved" if approved else "shipped with notes",
+                C_OK if approved else C_WARN)
+        row(body, "Tokens", f"{total_tokens:,}", C_INK)
+        row(body, "Cost", f"${total_cost:.4f}", C_INK)
+        body.append("\n")
+        body.append(f"{'Next':<8}", style=C_MUTED)
+        body.append(f"cd {output_dir} && docker compose up", style=C_ACCENT)
+
+        self._section("Build complete", "your project is ready to run", body)
 
     def render_error(self, message: str, hint: str | None = None) -> None:
-        """Render an error panel."""
-        body = Text()
-        body.append("⚠  ", style="bold red")
-        body.append(message, style="red")
-        if hint:
-            body.append("\n\n")
-            body.append(hint, style="dim")
+        """Render a quiet error section."""
         self.console.print()
-        self.console.print(
-            Panel(
-                Padding(body, (0, 2)),
-                border_style="red",
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+        head = Text("✕ ", style=f"bold {C_ERR}")
+        head.append("error", style=f"bold {C_ERR}")
+        self.console.print(head)
+        body = Text(message, style=C_INK)
+        if hint:
+            body.append(f"\n{hint}", style=C_FAINT)
+        self._rail(body)
 
     # ---- Per-turn rendering ---------------------------------------------
 
     def render_user_message(self, text: str) -> None:
-        """Echo the user's message — only in plain mode (prompt_toolkit shows
-        it interactively otherwise)."""
+        """Echo the user's message — only in plain mode."""
         if self.plain:
-            self.console.print(f"You ▸ {text}", style=BRAND_PRIMARY)
+            self.console.print(f"You > {text}", style=C_ACCENT)
 
     def render_agent_speaker(self, role_key: str) -> None:
-        """Render the speaker header, e.g. '📋 Product Manager'."""
-        label, color = _AGENT_STYLES.get(role_key, (role_key, "white"))
-        # Soft separator so successive agent messages don't run together
+        """Render the speaker: a small accent mark + the agent's name."""
+        mark, label, _ = _agent(role_key)
         self.console.print()
-        speaker = Text()
-        speaker.append("│ ", style=f"bold {color}")
-        speaker.append(label, style=f"bold {color}")
-        self.console.print(speaker)
-        self.console.print(Text("│", style=color))
+        if self.plain:
+            self.console.print(f"{label}:", style="bold")
+            return
+        line = Text(f"{mark} ", style=C_ACCENT)
+        line.append(label, style=f"bold {C_INK}")
+        line.append("  ", style=C_LINE)
+        line.append("─" * max(4, 30 - len(label)), style=C_LINE)  # trailing hairline
+        self.console.print(line)
 
     def render_agent_message(self, role_key: str, text: str) -> None:
-        """Render a complete agent message body, indented to match speaker.
-
-        Sync version — used in tests and plain mode. For animated typewriter
-        rendering use `render_agent_message_animated` from async code.
-        """
-        _, color = _AGENT_STYLES.get(role_key, (role_key, "white"))
+        """Render an agent message in a quiet left-rail thread."""
         if self.plain:
-            self.console.print(text, style=color)
+            self.console.print(text)
             return
+        self._rail(text)
 
-        try:
-            md = Markdown(text)
-            self.console.print(Padding(md, (0, 0, 0, 2)))
-        except Exception:
-            self.console.print(Text(text, style="white"))
+    def _rail(self, content: Any) -> None:
+        """Print text/markdown inside the thin left-rail."""
+        if isinstance(content, str):
+            try:
+                content = Markdown(content)
+            except Exception:
+                content = Text(content, style=C_INK)
+        self.console.print(self._rail_panel(content))
+
+    def _rail_panel(self, content: Any) -> Panel:
+        return Panel(content, box=LEFT_RAIL, border_style=C_RAIL, padding=(0, 2), expand=True)
 
     async def render_agent_message_animated(
         self,
         role_key: str,
         text: str,
-        chars_per_second: int = 240,
+        chars_per_second: int = 260,
     ) -> None:
-        """Render an agent message with a typewriter effect.
-
-        Uses rich.live to progressively reveal the message. Chunks the text
-        for performance — at 240 cps with a 60 Hz refresh, that's 4 chars
-        per frame. Markdown is rendered once at the end so list bullets and
-        bolds appear correctly without flickering.
-        """
+        """Typewriter reveal inside the rail, then settle into markdown."""
         if self.plain:
-            self.console.print(text, style="white")
+            self.console.print(text)
             return
-
-        # Empty / whitespace text — nothing to animate
         if not text or not text.strip():
             return
 
-        chunk_size = max(1, chars_per_second // 60)
-        delay = chunk_size / chars_per_second
-
-        # Phase 1: typewriter as plain (fast, monotype-feel) text
-        revealed = ""
+        chunk = max(1, chars_per_second // 60)
+        delay = chunk / chars_per_second
         with Live(
-            Padding(Text(""), (0, 0, 0, 2)),
+            self._rail_panel(Text("")),
             console=self.console,
             refresh_per_second=60,
-            transient=True,  # cleared when done so phase 2 can render markdown
+            transient=True,
         ) as live:
-            for i in range(0, len(text), chunk_size):
-                revealed = text[: i + chunk_size]
-                live.update(Padding(Text(revealed, style="white"), (0, 0, 0, 2)))
+            for i in range(0, len(text), chunk):
+                revealed = Text(text[: i + chunk], style=C_INK)
+                revealed.append(" ▌", style=C_ACCENT)
+                live.update(self._rail_panel(revealed))
                 try:
                     await asyncio.sleep(delay)
                 except asyncio.CancelledError:
                     break
-
-        # Phase 2: print the FINAL message as proper markdown (so bullets,
-        # bold, code blocks render correctly).
-        try:
-            self.console.print(Padding(Markdown(text), (0, 0, 0, 2)))
-        except Exception:
-            self.console.print(Padding(Text(text, style="white"), (0, 0, 0, 2)))
+        self._rail(text)
 
     @contextmanager
     def thinking(self, message: str = "thinking") -> Iterator[None]:
-        """Show an animated spinner while a block runs.
-
-        Use as: `with renderer.thinking("drafting PRD"): await graph.ainvoke(...)`.
-        Falls back to a plain status line in `plain` mode.
-        """
+        """Show a quiet spinner while a block runs."""
         if self.plain:
             self.console.print(f"  · {message}…", style="dim italic")
             yield
             return
-
-        spinner = Spinner(
-            "dots",
-            text=Text(f" {message}…", style=f"italic {BRAND_DIM}"),
-            style=BRAND_PRIMARY,
-        )
         with Live(
-            Padding(spinner, (0, 0, 0, 2)),
+            _ThinkingIndicator(message),
             console=self.console,
             refresh_per_second=12,
-            transient=True,  # cleared when context exits
+            transient=True,
         ):
             yield
 
     def render_status(self, message: str) -> None:
-        """Render a transient status line (e.g. 'drafting PRD…')."""
+        """Render a transient status line."""
         self.console.print()
-        self.console.print(Text(f"  ⠋ {message}", style=f"italic {BRAND_DIM}"))
+        self.console.print(Text(f"  ⠋ {message}", style=f"italic {C_MUTED}"))
 
     def render_turn_separator(self) -> None:
-        """Subtle separator drawn between major conversation turns."""
+        """A faint hairline between major conversation turns."""
         if self.plain:
             return
         self.console.print()
-        self.console.print(
-            Text("  · · ·", style=f"dim {BRAND_MUTED}"), justify="left"
-        )
+        self.console.print(Padding(Text("─" * 24, style=C_LINE), (0, 0, 0, 2)))
 
-    # ---- Artifact panels ------------------------------------------------
+    # ---- Artifact sections ----------------------------------------------
+
+    def _section(self, title: str, subtitle: str, body: Text) -> None:
+        """A quiet artifact section: an accent-marked heading + a rail body."""
+        self.console.print()
+        head = Text("◇ ", style=C_ACCENT)
+        head.append(title, style=f"bold {C_INK}")
+        if subtitle:
+            head.append(f"  {subtitle}", style=C_FAINT)
+        used = len(title) + (len(subtitle) + 2 if subtitle else 0)
+        head.append("  ", style=C_LINE)
+        head.append("─" * max(4, 30 - used), style=C_LINE)
+        self.console.print(head)
+        self._rail(body)
 
     def render_prd_panel(self, prd: Any) -> None:
-        """Render a compact PRD panel."""
         if prd is None:
             return
-
-        body = Text()
-        body.append(prd.project_name, style="bold white")
+        body = Text(prd.project_name, style=f"bold {C_INK}")
         body.append("\n")
-        body.append(prd.one_liner, style="dim")
-        body.append("\n\n")
-        body.append("P0 features\n", style=f"bold {BRAND_PRIMARY}")
+        body.append(prd.one_liner, style=C_SOFT)
+        body.append("\n\nRequired features", style=C_MUTED)
         for feat in prd.must_have_features:
-            body.append("  • ", style=BRAND_PRIMARY)
-            body.append(f"{feat}\n", style="white")
+            body.append("\n  · ", style=C_ACCENT)
+            body.append(feat, style=C_INK)
         if prd.user_stories:
             count = len(prd.user_stories)
-            body.append("\n")
-            body.append(
-                f"{count} user stor{'y' if count == 1 else 'ies'}",
-                style="dim",
-            )
-
-        title = Text("📋  PRD", style=BRAND_PRIMARY)
-        title.append(f"  ·  {prd.project_slug}", style="dim")
-
-        self.console.print()
-        self.console.print(
-            Panel(
-                Padding(body, (0, 1)),
-                title=title,
-                title_align="left",
-                border_style=BRAND_PRIMARY,
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+            body.append(f"\n\n{count} user stor{'y' if count == 1 else 'ies'}", style=C_FAINT)
+        self._section("PRD", prd.project_slug, body)
 
     def render_architecture_panel(self, arch: Any) -> None:
-        """Render a compact architecture panel."""
         if arch is None:
             return
+        body = Text("Stack", style=C_MUTED)
+        for tech in arch.stack:
+            body.append(f"\n  {tech.layer:<9}", style=C_FAINT)
+            body.append(tech.technology, style=C_INK)
+            if tech.version:
+                body.append(f"  {tech.version}", style=C_FAINT)
+        body.append(
+            f"\n\n{len(arch.api_endpoints)} endpoints   ·   {len(arch.components)} components",
+            style=C_FAINT,
+        )
+        self._section("Architecture", "", body)
+
+    def render_review_panel(self, report: Any) -> None:
+        if report is None:
+            return
+        approved = getattr(report, "approved", False)
+        issues = getattr(report, "issues", []) or []
+        summary = getattr(report, "summary", "")
 
         body = Text()
-        body.append("Stack\n", style=f"bold {BRAND_ACCENT}")
-        for tech in arch.stack:
-            body.append("  ", style="dim")
-            body.append(f"{tech.layer:<10}", style=BRAND_MUTED)
-            body.append(tech.technology, style="white")
-            if tech.version:
-                body.append(f"  {tech.version}", style="dim")
-            body.append("\n")
-        body.append("\n")
-        body.append(
-            f"{len(arch.api_endpoints)} endpoints  ·  "
-            f"{len(arch.components)} components",
-            style="dim",
-        )
+        if approved:
+            body.append("Approved", style=f"bold {C_OK}")
+        else:
+            body.append("Changes requested", style=f"bold {C_WARN}")
+            if getattr(report, "escalate_to_architect", False):
+                body.append("   → escalated to Architect", style=C_FAINT)
+        if summary:
+            body.append(f"\n{summary}", style=C_SOFT)
 
-        title = Text("🏗   Architecture", style=BRAND_ACCENT)
-
-        self.console.print()
-        self.console.print(
-            Panel(
-                Padding(body, (0, 1)),
-                title=title,
-                title_align="left",
-                border_style=BRAND_ACCENT,
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+        sev = {"critical": f"bold {C_ERR}", "major": f"bold {C_WARN}", "minor": C_FAINT}
+        for issue in issues:
+            s = str(getattr(issue, "severity", "minor"))
+            file = getattr(issue, "file", "") or "(cross-cutting)"
+            desc = getattr(issue, "description", "")
+            body.append(f"\n  {s:<8} ", style=sev.get(s, C_SOFT))
+            body.append(file, style=C_INK)
+            body.append(f"  {desc}", style=C_FAINT)
+        self._section("Code Review", "", body)
 
     def render_progress_parallel(self, statuses: dict[str, str]) -> None:
         """Render a snapshot of parallel agent statuses."""
         self.console.print()
         for role, status in statuses.items():
-            label, color = _AGENT_STYLES.get(role, (role, "white"))
+            _, label, _ = _agent(role)
             if status == "running":
-                symbol = "⠋"
-                style = f"italic {color}"
+                glyph, style = "⠋", C_ACCENT
             elif status == "done":
-                symbol = "✓"
-                style = f"bold {color}"
+                glyph, style = "✓", C_OK
             else:
-                symbol = "•"
-                style = f"dim {color}"
-            self.console.print(
-                Text(f"  {symbol}  {label}", style=style)
-                + Text(f"   {status}", style="dim")
-            )
+                glyph, style = "·", C_FAINT
+            line = Text(f"  {glyph}  ", style=style)
+            line.append(label, style=C_INK if status != "pending" else C_FAINT)
+            line.append(f"   {status}", style=C_FAINT)
+            self.console.print(line)
 
     def render_test_report(self, report: Any) -> None:
-        """Render a brief test report summary."""
         if report is None:
             return
         passed = getattr(report, "passed", 0)
         total = getattr(report, "total", 0)
         if passed == total and total > 0:
-            symbol, color = "✓", "green"
+            glyph, color = "✓", C_OK
         elif total == 0:
-            symbol, color = "•", "dim"
+            glyph, color = "·", C_FAINT
         else:
-            symbol, color = "✗", "red"
+            glyph, color = "✕", C_ERR
         self.console.print()
-        self.console.print(
-            Text(f"  {symbol}  Tests: {passed}/{total} passing",
-                 style=f"bold {color}")
-        )
-
-    # ---- Claude-Code-style panels --------------------------------------
+        self.console.print(Text(f"  {glyph}  Tests: {passed}/{total} passing", style=f"bold {color}"))
 
     def clear(self) -> None:
         """Clear the terminal screen. Transcript on disk is untouched."""
-        # rich's clear() emits the right ANSI sequences for the host terminal.
         self.console.clear()
 
-    def render_help(self, entries: list[tuple[str, str, str, str]]) -> None:
-        """Render the /help command reference as a categorized table.
+    # ---- Command panels --------------------------------------------------
 
-        Args:
-            entries: list of (canonical, aliases, description, category) tuples.
-                Typically supplied as `commands.HELP_ENTRIES`.
-        """
-        if self.plain:
-            # Plain mode: simple list, one command per line.
-            for canonical, aliases, desc, _cat in entries:
-                line = canonical
-                if aliases:
-                    line += f"  ({aliases})"
-                self.console.print(f"  {line:<32} {desc}")
-            self.console.print(
-                "\n  Anything else you type is a message to the active agent."
+    def _panel(self, body: Any, title: str) -> None:
+        """A quiet titled panel used by /help, /status, /cost."""
+        t = Text("◇ ", style=C_ACCENT)
+        t.append(title, style=f"bold {C_INK}")
+        self.console.print()
+        self.console.print(
+            Panel(
+                Padding(body, (0, 1)),
+                title=t,
+                title_align="left",
+                border_style=C_LINE,
+                box=ROUNDED,
+                expand=False,
             )
+        )
+
+    def render_help(self, entries: list[tuple[str, str, str, str]]) -> None:
+        """Render the /help command reference."""
+        if self.plain:
+            for canonical, aliases, desc, _cat in entries:
+                line = canonical + (f"  ({aliases})" if aliases else "")
+                self.console.print(f"  {line:<32} {desc}")
+            self.console.print("\n  Anything else you type is a message to the active agent.")
             return
 
-        # Group entries by category, preserving insertion order.
         by_cat: dict[str, list[tuple[str, str, str, str]]] = {}
         for row in entries:
             by_cat.setdefault(row[3], []).append(row)
 
         groups: list[Any] = []
         for cat, rows in by_cat.items():
-            table = Table(
-                box=SIMPLE,
-                show_header=False,
-                pad_edge=False,
-                padding=(0, 1),
-                expand=False,
-            )
-            table.add_column(style=BRAND_PRIMARY, no_wrap=True)
-            table.add_column(style="dim", no_wrap=True)
-            table.add_column(style="white")
+            table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 2))
+            table.add_column(no_wrap=True)
+            table.add_column(no_wrap=True)
+            table.add_column()
             for canonical, aliases, desc, _cat in rows:
-                table.add_row(canonical, aliases or "—", desc)
+                cmd = Text(canonical, style=f"bold {C_INK}")
+                table.add_row(
+                    cmd,
+                    Text(aliases, style=C_FAINT) if aliases else Text(""),
+                    Text(desc, style=C_SOFT),
+                )
+            header = Text(cat.upper(), style=f"bold {C_ACCENT}")
+            groups.append(Group(header, Padding(table, (0, 0, 1, 1))))
 
-            header = Text(cat, style=f"bold {BRAND_ACCENT}")
-            groups.append(Group(header, table, Text("")))
+        footer = Text("Anything else you type goes to the active agent.\n", style=f"italic {C_FAINT}")
+        for k, sep in [("Esc-Enter", " newline   "), ("Ctrl-C", " abort   "), ("Ctrl-D", " exit")]:
+            footer.append(k, style=C_MUTED)
+            footer.append(sep, style=C_FAINT)
 
-        footer = Text()
-        footer.append("Anything else you type is a message to the active agent.\n",
-                      style="dim italic")
-        footer.append("Esc-Enter", style=BRAND_DIM)
-        footer.append(" inserts newline  ·  ", style="dim")
-        footer.append("Ctrl-C", style=BRAND_DIM)
-        footer.append(" abort step  ·  ", style="dim")
-        footer.append("Ctrl-D", style=BRAND_DIM)
-        footer.append(" exit", style="dim")
-
-        self.console.print()
-        self.console.print(
-            Panel(
-                Padding(Group(*groups, footer), (0, 1)),
-                title=Text("Commands", style=f"bold {BRAND_PRIMARY}"),
-                title_align="left",
-                border_style=BRAND_MUTED,
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+        self._panel(Group(*groups, footer), "Commands")
 
     def render_status_panel(
         self,
@@ -505,76 +591,39 @@ class ChatRenderer:
         artifacts: dict[str, bool] | None = None,
         model_label: str | None = None,
     ) -> None:
-        """Render `/status` — a compact at-a-glance view of the build state.
-
-        Args:
-            phase: Current pipeline phase (e.g. "design", "development").
-            active_role: Role key of the agent currently working / waiting.
-            tokens: Total tokens spent so far.
-            cost_usd: Total dollar cost so far.
-            retries: Number of QA-triggered dev retries used.
-            max_retries: Retry budget.
-            artifacts: Optional map of artifact name -> exists (e.g.
-                {"PRD": True, "Architecture": False, "Tests": False}).
-            model_label: Optional "provider:model" string.
-        """
-        # Left column: build state
-        left = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
-        left.add_column(style="dim", no_wrap=True)
-        left.add_column(style="white")
+        """Render `/status` — a quiet at-a-glance view of the build state."""
+        left = Table(box=None, show_header=False, pad_edge=False, padding=(0, 2))
+        left.add_column(style=C_MUTED, no_wrap=True)
+        left.add_column()
 
         if phase:
-            left.add_row("Phase",  Text(phase, style=f"bold {BRAND_PRIMARY}"))
+            left.add_row("phase", Text(phase, style=f"bold {C_ACCENT}"))
         if active_role:
-            label, color = _AGENT_STYLES.get(active_role, (active_role, "white"))
-            left.add_row("Agent", Text(label, style=f"bold {color}"))
+            _, label, _ = _agent(active_role)
+            left.add_row("agent", Text(label, style=f"bold {C_INK}"))
         if model_label:
-            left.add_row("Model",  Text(model_label, style="white"))
+            left.add_row("model", Text(model_label, style=C_SOFT))
+        retry_color = C_ERR if retries >= max_retries else C_WARN if retries > 0 else C_OK
+        left.add_row("retries", Text(f"{retries}/{max_retries}", style=f"bold {retry_color}"))
+        left.add_row("tokens", Text(f"{tokens:,}", style=C_INK))
+        left.add_row("cost", Text(f"${cost_usd:.4f}", style=C_INK))
 
-        retry_color = (
-            "red" if retries >= max_retries
-            else "yellow" if retries > 0
-            else "green"
-        )
-        left.add_row(
-            "Retries",
-            Text(f"{retries}/{max_retries}", style=f"bold {retry_color}"),
-        )
-        left.add_row("Tokens", Text(f"{tokens:,}", style="white"))
-        left.add_row("Cost",   Text(f"${cost_usd:.4f}", style="white"))
-
-        # Right column: artifact checklist (skipped if not provided)
         right_renderable: Any | None = None
         if artifacts:
             right = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
             right.add_column(no_wrap=True)
-            right.add_column(no_wrap=True)
             for name, present in artifacts.items():
-                symbol = "✓" if present else "·"
-                color = "green" if present else "dim"
-                right.add_row(
-                    Text(symbol, style=f"bold {color}"),
-                    Text(name, style="white" if present else "dim"),
-                )
-            right_renderable = right
+                chip = Text("✓ " if present else "· ", style=C_OK if present else C_FAINT)
+                chip.append(name, style=C_INK if present else C_FAINT)
+                right.add_row(chip)
+            right_renderable = Group(Text("artifacts", style=C_MUTED), Text(""), right)
 
         body = (
-            Columns([left, right_renderable], padding=(0, 4), expand=False)
+            Columns([left, right_renderable], padding=(0, 6), expand=False)
             if right_renderable is not None
             else left
         )
-
-        self.console.print()
-        self.console.print(
-            Panel(
-                Padding(body, (0, 1)),
-                title=Text("Status", style=f"bold {BRAND_PRIMARY}"),
-                title_align="left",
-                border_style=BRAND_MUTED,
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+        self._panel(body, "Status")
 
     def render_cost_table(
         self,
@@ -582,87 +631,54 @@ class ChatRenderer:
         total_tokens: int,
         total_cost_usd: float,
     ) -> None:
-        """Render `/cost` — a per-role breakdown table.
-
-        Args:
-            per_role: Mapping role_key -> (input_tokens, output_tokens, cost_usd).
-                Roles with zero activity should be omitted by the caller.
-            total_tokens: Sum of input+output across all roles.
-            total_cost_usd: Sum of cost across all roles.
-        """
+        """Render `/cost` — a per-role breakdown with a quiet share bar."""
         if not per_role:
-            # Empty state — collapse into a one-liner so we don't print an empty panel.
-            self.render_status(
-                f"Tokens: {total_tokens:,}  ·  Cost: ${total_cost_usd:.4f}"
-            )
+            self.render_status(f"Tokens: {total_tokens:,}  ·  Cost: ${total_cost_usd:.4f}")
             return
 
-        table = Table(
-            box=SIMPLE,
-            show_header=True,
-            header_style=f"bold {BRAND_DIM}",
-            padding=(0, 1),
-            expand=False,
-        )
-        table.add_column("Agent", style="white", no_wrap=True)
-        table.add_column("Input", justify="right", style="dim")
-        table.add_column("Output", justify="right", style="dim")
-        table.add_column("Cost", justify="right", style="white")
+        table = Table(box=None, show_header=True, header_style=C_MUTED, padding=(0, 2))
+        table.add_column("agent", no_wrap=True)
+        table.add_column("share", no_wrap=True)
+        table.add_column("tokens", justify="right")
+        table.add_column("cost", justify="right")
 
+        max_cost = max((c for _, _, c in per_role.values()), default=0.0) or 1.0
         for role, (in_tok, out_tok, cost) in per_role.items():
-            label, color = _AGENT_STYLES.get(role, (role, "white"))
+            _, label, _ = _agent(role)
+            fill = round(cost / max_cost * 16)
+            bar = Text("▬" * fill, style=C_ACCENT)
+            bar.append("▬" * (16 - fill), style=C_LINE)
             table.add_row(
-                Text(label, style=color),
-                f"{in_tok:,}",
-                f"{out_tok:,}",
-                f"${cost:.4f}",
+                Text(label, style=C_INK),
+                bar,
+                Text(f"{in_tok + out_tok:,}", style=C_SOFT),
+                Text(f"${cost:.4f}", style=C_INK),
             )
-
-        # Total row
         table.add_section()
         table.add_row(
-            Text("Total", style=f"bold {BRAND_PRIMARY}"),
+            Text("Total", style=f"bold {C_ACCENT}"),
             "",
-            f"{total_tokens:,}",
-            Text(f"${total_cost_usd:.4f}", style=f"bold {BRAND_PRIMARY}"),
+            Text(f"{total_tokens:,}", style=f"bold {C_INK}"),
+            Text(f"${total_cost_usd:.4f}", style=f"bold {C_ACCENT}"),
         )
-
-        self.console.print()
-        self.console.print(
-            Panel(
-                table,
-                title=Text("Cost", style=f"bold {BRAND_PRIMARY}"),
-                title_align="left",
-                border_style=BRAND_MUTED,
-                box=ROUNDED,
-                expand=False,
-            )
-        )
+        self._panel(table, "Cost")
 
     # ---- Phase breadcrumb -------------------------------------------------
 
-    # Pipeline stages in order. Each entry is (label, role_key it represents).
     _BREADCRUMB_STAGES: ClassVar[list[tuple[str, str]]] = [
-        ("PM",        "product_manager"),
+        ("PM", "product_manager"),
         ("Architect", "architect"),
-        ("Devs",      "frontend_dev"),   # represents the parallel dev fan-out
-        ("QA",        "qa_engineer"),
-        ("DevOps",    "devops_engineer"),
+        ("Devs", "frontend_dev"),
+        ("Review", "code_reviewer"),
+        ("QA", "qa_engineer"),
+        ("DevOps", "devops_engineer"),
     ]
 
     def render_phase_breadcrumb(self, active_role: str | None) -> None:
-        """Render a single-line pipeline breadcrumb: PM → Architect → Devs → QA → DevOps.
-
-        The stage matching `active_role` is highlighted; earlier stages are
-        rendered as completed (✓), later stages as pending (dim).
-        """
+        """Render a single-line pipeline breadcrumb, active stage highlighted."""
         if self.plain:
             return
-
-        # Devs covers both frontend_dev and backend_dev — collapse.
         norm = "frontend_dev" if active_role == "backend_dev" else active_role
-
-        # Find the active index. -1 if not in the pipeline (e.g. supervisor).
         idx = -1
         for i, (_label, role) in enumerate(self._BREADCRUMB_STAGES):
             if role == norm:
@@ -671,22 +687,14 @@ class ChatRenderer:
 
         line = Text()
         for i, (label, _role) in enumerate(self._BREADCRUMB_STAGES):
-            if idx == -1:
-                # No clear active stage — render everything dim.
-                style = "dim"
-                glyph = "·"
-            elif i < idx:
-                style = "green"
-                glyph = "✓"
+            if idx != -1 and i < idx:
+                style, glyph = C_OK, "✓"
             elif i == idx:
-                style = f"bold {BRAND_PRIMARY}"
-                glyph = "●"
+                style, glyph = f"bold {C_ACCENT}", "●"
             else:
-                style = "dim"
-                glyph = "○"
-            line.append(f" {glyph} ", style=style)
+                style, glyph = C_FAINT, "○"
+            line.append(f"{glyph} ", style=style)
             line.append(label, style=style)
             if i < len(self._BREADCRUMB_STAGES) - 1:
-                line.append("  →", style="dim")
-
+                line.append("   ·   ", style=C_LINE)
         self.console.print(Padding(line, (0, 0, 1, 2)))

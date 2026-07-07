@@ -5,13 +5,12 @@ Tests memory retrieval and persistence across builds.
 
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from loom.memory.models import MemoryConfig, MemoryContext, MemoryRecord
+from loom.memory.models import MemoryContext, MemoryRecord
 from loom.memory.store import InMemoryStore
-from loom.state.enums import TechLayer
 
 
 def create_memory_record(
@@ -183,10 +182,11 @@ class TestMemoryIntegration:
         mock_record = create_memory_record()
         mock_store.upsert(mock_record, [0.1] * 384)
 
-        with patch("loom.agents.memory_retrieve.get_memory_store", return_value=mock_store), \
-             patch("loom.agents.memory_retrieve.get_embedder") as mock_embedder_fn, \
-             patch("loom.agents.memory_retrieve.is_memory_available", return_value=True):
-
+        with (
+            patch("loom.agents.memory_retrieve.get_memory_store", return_value=mock_store),
+            patch("loom.agents.memory_retrieve.get_embedder") as mock_embedder_fn,
+            patch("loom.agents.memory_retrieve.is_memory_available", return_value=True),
+        ):
             mock_embedder = Mock()
             mock_embedder.embed.return_value = [0.1] * 384
             mock_embedder_fn.return_value = mock_embedder
@@ -202,8 +202,8 @@ class TestMemoryIntegration:
         from loom.agents.memory_persist import memory_persist_node
         from loom.config import LoomConfig
         from loom.state.models import (
-            ArchitectureDoc,
             PRD,
+            ArchitectureDoc,
             TestCase,
             TestReport,
         )
@@ -233,7 +233,12 @@ class TestMemoryIntegration:
 
         arch = ArchitectureDoc(
             stack=[
-                {"layer": "backend", "technology": "FastAPI", "version": "0.115", "rationale": "Modern"},
+                {
+                    "layer": "backend",
+                    "technology": "FastAPI",
+                    "version": "0.115",
+                    "rationale": "Modern",
+                },
             ],
             api_endpoints=[],
             components=[],
@@ -263,10 +268,11 @@ class TestMemoryIntegration:
 
         mock_store = InMemoryStore()
 
-        with patch("loom.agents.memory_persist.get_memory_store", return_value=mock_store), \
-             patch("loom.agents.memory_persist.get_embedder") as mock_embedder_fn, \
-             patch("loom.agents.memory_persist.is_memory_available", return_value=True):
-
+        with (
+            patch("loom.agents.memory_persist.get_memory_store", return_value=mock_store),
+            patch("loom.agents.memory_persist.get_embedder") as mock_embedder_fn,
+            patch("loom.agents.memory_persist.is_memory_available", return_value=True),
+        ):
             mock_embedder = Mock()
             mock_embedder.embed.return_value = [0.1] * 384
             mock_embedder_fn.return_value = mock_embedder

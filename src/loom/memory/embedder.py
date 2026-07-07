@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from loom.memory.models import MemoryConfig
@@ -66,7 +66,7 @@ class LocalEmbedder(Embedder):
             model_name: The sentence-transformers model to use.
         """
         self.model_name = model_name
-        self._model = None
+        self._model: Any = None
 
     def _ensure_model(self) -> None:
         """Lazy-load the model on first use."""
@@ -99,7 +99,8 @@ class LocalEmbedder(Embedder):
         """
         self._ensure_model()
         embedding = self._model.encode(text, convert_to_numpy=True)
-        return embedding.tolist()
+        vector: list[float] = embedding.tolist()
+        return vector
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed multiple texts.
@@ -112,7 +113,8 @@ class LocalEmbedder(Embedder):
         """
         self._ensure_model()
         embeddings = self._model.encode(texts, convert_to_numpy=True)
-        return embeddings.tolist()
+        vectors: list[list[float]] = embeddings.tolist()
+        return vectors
 
 
 class OpenAIEmbedder(Embedder):
@@ -130,7 +132,7 @@ class OpenAIEmbedder(Embedder):
             model_name: The OpenAI embedding model to use.
         """
         self.model_name = model_name
-        self._client = None
+        self._client: Any = None
 
     def _ensure_client(self) -> None:
         """Lazy-load the OpenAI client."""
@@ -141,8 +143,7 @@ class OpenAIEmbedder(Embedder):
                 self._client = openai.OpenAI()
             except ImportError as e:
                 raise ImportError(
-                    "openai is required for OpenAI embeddings. "
-                    "Install with: pip install openai"
+                    "openai is required for OpenAI embeddings. Install with: pip install openai"
                 ) from e
 
     @property
@@ -164,7 +165,8 @@ class OpenAIEmbedder(Embedder):
             model=self.model_name,
             input=text,
         )
-        return response.data[0].embedding
+        vector: list[float] = response.data[0].embedding
+        return vector
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed multiple texts.

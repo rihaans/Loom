@@ -1,5 +1,15 @@
 import { Handle, Position } from '@xyflow/react'
-import { User, Cpu, Code, TestTube, Server, Users } from 'lucide-react'
+import {
+  ClipboardList,
+  DraftingCompass,
+  Code2,
+  Server,
+  ScanSearch,
+  FlaskConical,
+  Rocket,
+  User,
+  Check,
+} from 'lucide-react'
 
 interface AgentNodeProps {
   data: {
@@ -11,51 +21,67 @@ interface AgentNodeProps {
   }
 }
 
-const ICONS: Record<string, typeof User> = {
-  product_manager: Users,
-  architect: Cpu,
-  frontend_dev: Code,
-  backend_dev: Server,
-  qa_engineer: TestTube,
-  devops_engineer: Server,
+const META: Record<string, { icon: typeof User; color: string }> = {
+  product_manager: { icon: ClipboardList, color: '#00d9ff' },
+  architect: { icon: DraftingCompass, color: '#ff5fd2' },
+  frontend_dev: { icon: Code2, color: '#88c0d0' },
+  backend_dev: { icon: Server, color: '#a3be8c' },
+  code_reviewer: { icon: ScanSearch, color: '#d08770' },
+  qa_engineer: { icon: FlaskConical, color: '#ebcb8b' },
+  devops_engineer: { icon: Rocket, color: '#b48ead' },
 }
 
 export default function AgentNode({ data }: AgentNodeProps) {
-  const Icon = ICONS[data.role] || User
+  const meta = META[data.role] ?? { icon: User, color: '#9fb3c8' }
+  const Icon = meta.icon
+  const accent = data.isError ? '#f87171' : data.isDone ? '#34d399' : meta.color
 
   return (
     <div
-      className={`
-        px-4 py-3 rounded-lg border-2 bg-surface-800 min-w-[140px]
-        ${data.isActive ? 'border-primary-500 agent-active' : 'border-surface-600'}
-        ${data.isDone ? 'border-green-500' : ''}
-        ${data.isError ? 'border-red-500' : ''}
-      `}
+      className="relative min-w-[150px] rounded-xl border bg-surface-850/90 px-3.5 py-3 backdrop-blur-sm transition-all duration-300"
+      style={{
+        borderColor: data.isActive ? accent : 'rgba(255,255,255,0.08)',
+        boxShadow: data.isActive ? `0 0 22px -4px ${accent}` : '0 8px 24px -16px #000',
+      }}
     >
-      <Handle type="target" position={Position.Left} className="!bg-surface-600" />
+      <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-white/25" />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
-          className={`
-            p-2 rounded-lg
-            ${data.isActive ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-700 text-gray-400'}
-            ${data.isDone ? 'bg-green-500/20 text-green-400' : ''}
-            ${data.isError ? 'bg-red-500/20 text-red-400' : ''}
-          `}
+          className="grid h-8 w-8 place-items-center rounded-lg transition"
+          style={{
+            backgroundColor: `${accent}22`,
+            color: accent,
+            boxShadow: data.isActive ? `0 0 0 1px ${accent}55 inset` : 'none',
+          }}
         >
-          <Icon className="w-4 h-4" />
+          {data.isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
         </div>
-        <span className="font-medium text-sm">{data.label}</span>
+        <div className="leading-tight">
+          <div className="text-sm font-semibold text-white">{data.label}</div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-500">
+            {data.isError
+              ? 'error'
+              : data.isDone
+                ? 'done'
+                : data.isActive
+                  ? 'working'
+                  : 'idle'}
+          </div>
+        </div>
       </div>
 
       {data.isActive && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-primary-400">
-          <div className="w-2 h-2 bg-primary-400 rounded-full animate-pulse" />
-          Working...
+        <div className="mt-2 flex items-center gap-2 text-[11px]" style={{ color: accent }}>
+          <span
+            className="h-1.5 w-1.5 rounded-full animate-glow-pulse"
+            style={{ backgroundColor: accent }}
+          />
+          processing…
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} className="!bg-surface-600" />
+      <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-white/25" />
     </div>
   )
 }

@@ -11,14 +11,11 @@ from rich.console import Console
 from loom.cli.chat.renderer import ChatRenderer
 from loom.state.models import (
     PRD,
-    APIEndpoint,
     ArchitectureDoc,
-    HttpMethod,
     Priority,
     ProjectType,
     TechChoice,
     TechLayer,
-    TestCase,
     TestReport,
     UserStory,
 )
@@ -48,7 +45,7 @@ class TestBanner:
         # version and model must be visible.
         assert "0.1.0" in out
         assert "anthropic:claude-sonnet-4-5" in out
-        assert "your AI software team" in out
+        assert "software team" in out
 
     def test_plain_mode_banner_has_loom_text(self) -> None:
         """In --plain mode the ASCII art is replaced with the literal word."""
@@ -56,7 +53,7 @@ class TestBanner:
         renderer = ChatRenderer(console=console, plain=True)
         renderer.render_banner("0.1.0", "ollama:llama3")
         out = _output(console)
-        assert "LOOM" in out
+        assert "Loom" in out
         assert "0.1.0" in out
         assert "ollama:llama3" in out
 
@@ -224,9 +221,7 @@ class TestArtifactPanels:
     def test_progress_parallel(self) -> None:
         console = _captured_console()
         renderer = ChatRenderer(console=console)
-        renderer.render_progress_parallel(
-            {"frontend_dev": "running", "backend_dev": "done"}
-        )
+        renderer.render_progress_parallel({"frontend_dev": "running", "backend_dev": "done"})
         out = _output(console)
         assert "Frontend Dev" in out
         assert "Backend Dev" in out
@@ -263,13 +258,14 @@ class TestHelpPanel:
         console = _captured_console()
         renderer = ChatRenderer(console=console)
         from loom.cli.chat.commands import HELP_ENTRIES
+
         renderer.render_help(HELP_ENTRIES)
         out = _output(console)
-        # Section headers
-        assert "Session" in out
-        assert "Workflow" in out
-        assert "Artifacts" in out
-        assert "Config" in out
+        # Section headers (rendered as uppercase category badges)
+        assert "SESSION" in out
+        assert "WORKFLOW" in out
+        assert "ARTIFACTS" in out
+        assert "CONFIG" in out
         # A handful of canonical commands appear
         assert "/help" in out
         assert "/status" in out
@@ -279,6 +275,7 @@ class TestHelpPanel:
         console = _captured_console()
         renderer = ChatRenderer(console=console, plain=True)
         from loom.cli.chat.commands import HELP_ENTRIES
+
         renderer.render_help(HELP_ENTRIES)
         out = _output(console)
         # Plain mode lists commands; no box-drawing characters.
@@ -340,7 +337,7 @@ class TestCostTable:
         renderer = ChatRenderer(console=console)
         per_role = {
             "product_manager": (1000, 500, 0.0050),
-            "architect":       (800, 1200, 0.0125),
+            "architect": (800, 1200, 0.0125),
         }
         renderer.render_cost_table(per_role, total_tokens=3500, total_cost_usd=0.0175)
         out = _output(console)
@@ -404,6 +401,7 @@ class TestPhaseBreadcrumb:
 class TestClear:
     def test_clear_calls_console_clear(self) -> None:
         from unittest.mock import MagicMock
+
         console = MagicMock()
         renderer = ChatRenderer(console=console)
         renderer.clear()

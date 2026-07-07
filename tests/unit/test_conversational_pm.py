@@ -12,12 +12,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from loom.agents.product_manager import MAX_PM_TURNS, product_manager_node
 from loom.config import LoomConfig
-from loom.state.enums import AgentRole, EventType
-
+from loom.state.enums import EventType
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_config() -> LoomConfig:
     return LoomConfig()
@@ -53,6 +53,7 @@ SAMPLE_PRD_DICT: dict[str, Any] = {
 
 def _make_prd_mock():
     from loom.state.models import PRD
+
     return PRD(**SAMPLE_PRD_DICT)
 
 
@@ -220,10 +221,12 @@ class TestTurnCap:
         """Turn cap should emit AGENT_TURN_LIMIT event."""
         history = []
         for i in range(MAX_PM_TURNS):
-            history.extend([
-                HumanMessage(content=f"h{i}"),
-                AIMessage(content=f"a{i}"),
-            ])
+            history.extend(
+                [
+                    HumanMessage(content=f"h{i}"),
+                    AIMessage(content=f"a{i}"),
+                ]
+            )
 
         state = {
             "description": "todo app",
@@ -242,10 +245,12 @@ class TestTurnCap:
         """One turn below the cap should still allow normal flow."""
         history = []
         for i in range(MAX_PM_TURNS - 1):  # one below cap
-            history.extend([
-                HumanMessage(content=f"h{i}"),
-                AIMessage(content=f"a{i}"),
-            ])
+            history.extend(
+                [
+                    HumanMessage(content=f"h{i}"),
+                    AIMessage(content=f"a{i}"),
+                ]
+            )
 
         mock_llm = _make_mock_llm("One more question?")
 
@@ -373,41 +378,49 @@ class TestUnwrapJsonResponse:
 
     def test_plain_text_unchanged(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         text = "Hello! What kind of users?"
         assert _unwrap_json_response(text) == text
 
     def test_unwraps_message_key(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         text = '{"message": "Hi! What users?"}'
         assert _unwrap_json_response(text) == "Hi! What users?"
 
     def test_unwraps_response_key(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         text = '{"response": "Got it"}'
         assert _unwrap_json_response(text) == "Got it"
 
     def test_unwraps_with_code_fence(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         text = '```json\n{"message": "Hello"}\n```'
         assert _unwrap_json_response(text) == "Hello"
 
     def test_unwraps_single_string_value(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         text = '{"reply": "Hi there"}'
         assert _unwrap_json_response(text) == "Hi there"
 
     def test_returns_original_for_non_dict_json(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         text = '["not", "a", "wrapper"]'
         assert _unwrap_json_response(text) == text
 
     def test_returns_original_for_unparseable(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
-        text = '{not valid json at all'
+
+        text = "{not valid json at all"
         assert _unwrap_json_response(text) == text
 
     def test_data_shaped_json_renders_as_bullet_list(self) -> None:
         from loom.agents.product_manager import _unwrap_json_response
+
         # qwen-coder pathology: answers conversational questions with raw data
         text = '{"single_user": true, "auth_required": false}'
         result = _unwrap_json_response(text)
@@ -425,8 +438,10 @@ class TestLegacyPath:
         """interactive=False must still produce a PRD in one shot."""
         prd_mock = _make_prd_mock()
 
-        with patch("loom.agents.product_manager.build_agent_chain") as mock_chain_fn, \
-             patch("loom.agents.product_manager.get_llm_for_role"):
+        with (
+            patch("loom.agents.product_manager.build_agent_chain") as mock_chain_fn,
+            patch("loom.agents.product_manager.get_llm_for_role"),
+        ):
             chain = MagicMock()
             chain.ainvoke = AsyncMock(return_value=prd_mock)
             parser = MagicMock()
@@ -449,8 +464,10 @@ class TestLegacyPath:
         """interactive=False must not write to agent_messages."""
         prd_mock = _make_prd_mock()
 
-        with patch("loom.agents.product_manager.build_agent_chain") as mock_chain_fn, \
-             patch("loom.agents.product_manager.get_llm_for_role"):
+        with (
+            patch("loom.agents.product_manager.build_agent_chain") as mock_chain_fn,
+            patch("loom.agents.product_manager.get_llm_for_role"),
+        ):
             chain = MagicMock()
             chain.ainvoke = AsyncMock(return_value=prd_mock)
             parser = MagicMock()
@@ -473,8 +490,10 @@ class TestLegacyPath:
         """interactive=False path must not set agent_status."""
         prd_mock = _make_prd_mock()
 
-        with patch("loom.agents.product_manager.build_agent_chain") as mock_chain_fn, \
-             patch("loom.agents.product_manager.get_llm_for_role"):
+        with (
+            patch("loom.agents.product_manager.build_agent_chain") as mock_chain_fn,
+            patch("loom.agents.product_manager.get_llm_for_role"),
+        ):
             chain = MagicMock()
             chain.ainvoke = AsyncMock(return_value=prd_mock)
             parser = MagicMock()

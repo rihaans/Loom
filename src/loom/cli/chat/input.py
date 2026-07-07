@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
@@ -26,36 +27,43 @@ logger = logging.getLogger(__name__)
 # Visual style for the user prompt — matches the chat renderer's brand color.
 _USER_PROMPT_STYLE = Style.from_dict(
     {
-        "prompt.you": "bold #00d9ff",
-        "prompt.arrow": "#ff5fd2 bold",
-        # Completer popup colors
-        "completion-menu.completion": "bg:#1a1a2e #ffffff",
-        "completion-menu.completion.current": "bg:#00d9ff #000000 bold",
-        "completion-menu.meta.completion": "bg:#1a1a2e #88c0d0",
-        "completion-menu.meta.completion.current": "bg:#00d9ff #000000",
+        "bar": "#454a53",  # dim gutter
+        "prompt": "bold #c9b68c",  # champagne chevron
+        "prompt.you": "bold #c9b68c",
+        "prompt.arrow": "#c9b68c",
+        # Completer popup — a quiet floating menu.
+        "completion-menu": "bg:#15171c",
+        "completion-menu.completion": "bg:#15171c #a2a7b0",
+        "completion-menu.completion.current": "bg:#c9b68c #15171c bold",
+        "completion-menu.meta.completion": "bg:#15171c #6a707a italic",
+        "completion-menu.meta.completion.current": "bg:#b7a679 #15171c italic",
+        "scrollbar.background": "bg:#20232a",
+        "scrollbar.button": "bg:#c9b68c",
     }
 )
 
 
-# Canonical slash commands surfaced in the autocomplete popup. Each entry is
-# (display, meta) — the display is what gets inserted (including the leading
-# slash), the meta is the right-column description.
-_SLASH_COMPLETIONS: list[tuple[str, str]] = [
-    ("/help", "Show command reference"),
-    ("/status", "Show current build state"),
-    ("/clear", "Clear screen (keep transcript)"),
-    ("/cost", "Show running token and dollar cost"),
-    ("/done", "Tell the current agent to commit"),
-    ("/skip", "Accept current proposal and proceed"),
-    ("/show prd", "Render the PRD artifact"),
-    ("/show architecture", "Render the architecture artifact"),
-    ("/show code", "Render the code summary"),
-    ("/show tests", "Render the test report"),
-    ("/back", "Restore the previous checkpoint"),
-    ("/restart", "Discard current build, start over"),
-    ("/save", "Save the current chat transcript"),
-    ("/model", "Switch active LLM (with arg) or show current"),
-    ("/quit", "Exit the session"),
+# Single accent — the champagne used across the whole REPL.
+_ACCENT = "#c9b68c"
+
+# Canonical slash commands for the autocomplete popup: (display, meta, category).
+# The display is inserted (with leading slash); the category tints its ◆ marker.
+_SLASH_COMPLETIONS: list[tuple[str, str, str]] = [
+    ("/help", "Show command reference", "session"),
+    ("/status", "Show current build state", "config"),
+    ("/cost", "Running token & dollar cost", "config"),
+    ("/model", "Switch or show the active LLM", "config"),
+    ("/done", "Tell the current agent to commit", "workflow"),
+    ("/skip", "Accept the proposal and proceed", "workflow"),
+    ("/back", "Restore the previous checkpoint", "workflow"),
+    ("/restart", "Discard build, start over", "workflow"),
+    ("/show prd", "Render the PRD artifact", "artifacts"),
+    ("/show architecture", "Render the architecture", "artifacts"),
+    ("/show code", "Render the code summary", "artifacts"),
+    ("/show tests", "Render the test report", "artifacts"),
+    ("/save", "Save the chat transcript", "session"),
+    ("/clear", "Clear screen (keep transcript)", "session"),
+    ("/quit", "Exit the session", "session"),
 ]
 
 
@@ -82,12 +90,12 @@ class _SlashCommandCompleter(Completer):
             return
 
         prefix = text.lower()
-        for display, meta in _SLASH_COMPLETIONS:
+        for display, meta, _category in _SLASH_COMPLETIONS:
             if display.lower().startswith(prefix):
                 yield Completion(
                     text=display,
                     start_position=-len(text),
-                    display=display,
+                    display=[(f"fg:{_ACCENT}", "◇ "), ("", display)],
                     display_meta=meta,
                 )
 
@@ -101,7 +109,7 @@ def _build_keybindings() -> KeyBindings:
     kb = KeyBindings()
 
     @kb.add("escape", "enter")
-    def _(event) -> None:
+    def _(event: Any) -> None:
         event.current_buffer.insert_text("\n")
 
     return kb
@@ -115,18 +123,18 @@ class ChatInputReader:
     """
 
     def __init__(self, prompt_text: str | None = None) -> None:
-        # Default prompt: "You ▸ " — colored bicolor (You in cyan, ▸ in magenta)
         self.prompt_text = prompt_text
         self._history = InMemoryHistory()
 
+        # A clean, robust prompt: a coral accent bar + chevron. (A drawn box around
+        # a single-line prompt_toolkit prompt doesn't render reliably across
+        # terminals, so we keep the prompt itself crisp and let the transcript
+        # above carry the visual weight.)
+        message: Any
         if prompt_text is not None:
-            # Caller-supplied custom prompt — render in single style for backward compat
             message = [("class:prompt.you", prompt_text)]
         else:
-            message = [
-                ("class:prompt.you", "You "),
-                ("class:prompt.arrow", "▸ "),
-            ]
+            message = [("class:bar", "▌ "), ("class:prompt", "❯ ")]
 
         self._session: PromptSession[str] = PromptSession(
             history=self._history,
@@ -148,13 +156,7 @@ class ChatInputReader:
             KeyboardInterrupt: User pressed Ctrl-C.
             EOFError: User pressed Ctrl-D.
         """
-        try:
-            text = await self._session.prompt_async()
-        except KeyboardInterrupt:
-            raise
-        except EOFError:
-            raise
-        return text
+        return await self._session.prompt_async()
 
     def add_to_history(self, text: str) -> None:
         """Append text to the input history buffer."""

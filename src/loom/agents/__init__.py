@@ -4,6 +4,7 @@ from loom.agents.architect import architect_node
 from loom.agents.backend_dev import backend_dev_node
 from loom.agents.base import (
     build_agent_chain,
+    build_revision_feedback,
     create_agent_for_role,
     get_format_instructions,
 )
@@ -18,6 +19,7 @@ from loom.agents.project_manager import (
     route_to_agent,
 )
 from loom.agents.qa_engineer import qa_engineer_node
+from loom.agents.reviewer import code_reviewer_node
 
 __all__ = [
     # Agent nodes
@@ -25,6 +27,8 @@ __all__ = [
     "backend_dev_node",
     # Base utilities
     "build_agent_chain",
+    "build_revision_feedback",
+    "code_reviewer_node",
     "create_agent_for_role",
     # Routing
     "decide_next_phase",

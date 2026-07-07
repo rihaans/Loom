@@ -596,16 +596,19 @@ class TestMergeMessagesDict:
 
     def test_both_empty(self) -> None:
         from loom.state.reducers import merge_messages_dict
+
         assert merge_messages_dict({}, {}) == {}
 
     def test_none_inputs(self) -> None:
         from loom.state.reducers import merge_messages_dict
+
         assert merge_messages_dict(None, None) == {}
         assert merge_messages_dict(None, {"pm": ["msg"]}) == {"pm": ["msg"]}
         assert merge_messages_dict({"pm": ["msg"]}, None) == {"pm": ["msg"]}
 
     def test_new_key_added(self) -> None:
         from loom.state.reducers import merge_messages_dict
+
         a = {"product_manager": ["msg1"]}
         b = {"architect": ["msg2"]}
         result = merge_messages_dict(a, b)
@@ -613,6 +616,7 @@ class TestMergeMessagesDict:
 
     def test_messages_appended_not_replaced(self) -> None:
         from loom.state.reducers import merge_messages_dict
+
         a = {"product_manager": ["turn1", "turn2"]}
         b = {"product_manager": ["turn3"]}
         result = merge_messages_dict(a, b)
@@ -620,6 +624,7 @@ class TestMergeMessagesDict:
 
     def test_does_not_mutate_inputs(self) -> None:
         from loom.state.reducers import merge_messages_dict
+
         a = {"pm": ["msg1"]}
         b = {"pm": ["msg2"]}
         a_copy = {"pm": ["msg1"]}
@@ -628,6 +633,7 @@ class TestMergeMessagesDict:
 
     def test_multiple_roles_merged(self) -> None:
         from loom.state.reducers import merge_messages_dict
+
         a = {"pm": ["a1"], "arch": ["b1"]}
         b = {"pm": ["a2"], "arch": ["b2"]}
         result = merge_messages_dict(a, b)
@@ -714,7 +720,7 @@ class TestLoomConfig:
 
     def test_get_llm_config_override(self) -> None:
         """Test getting overridden LLM config for a role."""
-        from loom.config import LoomConfig, LLMConfig
+        from loom.config import LLMConfig, LoomConfig
 
         config = LoomConfig(
             llm_overrides={

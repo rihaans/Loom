@@ -5,10 +5,8 @@ Tests the retry budget enforcement and routing decisions.
 
 from unittest.mock import Mock
 
-import pytest
-
-from loom.graph.routing import route_after_qa
 from loom.graph.parallel import should_retry_development
+from loom.graph.routing import route_after_qa
 
 
 class TestQARetryBudget:

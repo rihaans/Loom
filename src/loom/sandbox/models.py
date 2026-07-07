@@ -62,9 +62,7 @@ class TestRunConfig(BaseModel):
     """Configuration for running tests."""
 
     # Project files to copy into sandbox
-    files: dict[str, str] = Field(
-        default_factory=dict, description="Map of file paths to contents"
-    )
+    files: dict[str, str] = Field(default_factory=dict, description="Map of file paths to contents")
 
     # Test command to run
     command: str = Field(description="Test command (e.g., 'pytest tests/')")

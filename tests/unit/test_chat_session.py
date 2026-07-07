@@ -85,12 +85,16 @@ class TestSlashDispatch:
         # Two cost entries from different agents — should aggregate per role.
         # `agent` is the canonical CostEntry field; the dispatcher prefers it.
         c1 = MagicMock(
-            agent="product_manager", input_tokens=100,
-            output_tokens=50, cost_usd=0.001,
+            agent="product_manager",
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.001,
         )
         c2 = MagicMock(
-            agent="architect", input_tokens=200,
-            output_tokens=80, cost_usd=0.003,
+            agent="architect",
+            input_tokens=200,
+            output_tokens=80,
+            cost_usd=0.003,
         )
         await session._handle_slash(cmd, {"costs": [c1, c2]})
         session.renderer.render_cost_table.assert_called_once()
@@ -127,8 +131,12 @@ class TestSlashDispatch:
     async def test_show_prd_renders_panel(self) -> None:
         session = _make_session()
         from loom.state.models import (
-            PRD, Priority, ProjectType, UserStory,
+            PRD,
+            Priority,
+            ProjectType,
+            UserStory,
         )
+
         prd = PRD(
             project_name="X",
             project_slug="x",
@@ -137,15 +145,17 @@ class TestSlashDispatch:
             target_users=["u"],
             user_stories=[
                 UserStory(
-                    id="US-001", role="u", goal="g", benefit="b",
-                    acceptance_criteria=["a"], priority=Priority.P0,
+                    id="US-001",
+                    role="u",
+                    goal="g",
+                    benefit="b",
+                    acceptance_criteria=["a"],
+                    priority=Priority.P0,
                 )
             ],
             must_have_features=["f"],
         )
-        cmd = SlashCommandResult(
-            command=SlashCommand.SHOW, args=["prd"], raw="/show prd"
-        )
+        cmd = SlashCommandResult(command=SlashCommand.SHOW, args=["prd"], raw="/show prd")
         await session._handle_slash(cmd, {"prd": prd})
         session.renderer.render_prd_panel.assert_called_once()
 
@@ -159,9 +169,7 @@ class TestSlashDispatch:
     @pytest.mark.asyncio
     async def test_show_unknown_artifact(self) -> None:
         session = _make_session()
-        cmd = SlashCommandResult(
-            command=SlashCommand.SHOW, args=["bogus"], raw="/show bogus"
-        )
+        cmd = SlashCommandResult(command=SlashCommand.SHOW, args=["bogus"], raw="/show bogus")
         await session._handle_slash(cmd, {})
         session.renderer.render_error.assert_called_once()
 
@@ -170,6 +178,7 @@ class TestSlashDispatch:
         """Smoke test the dispatch path with the real CostEntry model."""
         from loom.state.enums import AgentRole
         from loom.state.models import CostEntry
+
         session = _make_session()
         costs = [
             CostEntry(
@@ -265,20 +274,30 @@ class TestRenderNewMessages:
     @pytest.mark.asyncio
     async def test_renders_prd_panel_on_done(self) -> None:
         from langchain_core.messages import AIMessage, HumanMessage
+
         from loom.state.models import (
-            PRD, Priority, ProjectType, UserStory,
+            PRD,
+            Priority,
+            ProjectType,
+            UserStory,
         )
 
         session = _make_session()
         session.renderer.render_agent_message_animated = AsyncMock()
         prd = PRD(
-            project_name="X", project_slug="x",
+            project_name="X",
+            project_slug="x",
             project_type=ProjectType.REST_API,
-            one_liner="x", target_users=["u"],
+            one_liner="x",
+            target_users=["u"],
             user_stories=[
                 UserStory(
-                    id="US-001", role="u", goal="g", benefit="b",
-                    acceptance_criteria=["a"], priority=Priority.P0,
+                    id="US-001",
+                    role="u",
+                    goal="g",
+                    benefit="b",
+                    acceptance_criteria=["a"],
+                    priority=Priority.P0,
                 )
             ],
             must_have_features=["f"],
@@ -319,8 +338,7 @@ class TestRenderNewMessages:
         # Architect just produced its first 2 messages
         values = {
             "agent_messages": {
-                "product_manager": [HumanMessage(content="x"),
-                                    AIMessage(content="x")] * 2,
+                "product_manager": [HumanMessage(content="x"), AIMessage(content="x")] * 2,
                 "architect": [
                     HumanMessage(content="please propose"),
                     AIMessage(content="Stack: FastAPI + React. Sound good?"),

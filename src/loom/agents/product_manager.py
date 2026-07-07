@@ -8,7 +8,6 @@ Supports two modes controlled by state.interactive:
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -21,6 +20,7 @@ from langchain_core.messages import (
 )
 from langchain_core.outputs import LLMResult
 
+from loom._time import now_utc
 from loom.agents.base import build_agent_chain
 from loom.agents.prompts import (
     PRODUCT_MANAGER_HUMAN_TEMPLATE,
@@ -70,14 +70,14 @@ def _create_events(prd: PRD) -> list[Event]:
     """Create events for a successful PRD generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.PRODUCT_MANAGER,
             phase=Phase.REQUIREMENTS,
             payload={"message": "Starting PRD generation"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_END,
             agent=AgentRole.PRODUCT_MANAGER,
             phase=Phase.REQUIREMENTS,
@@ -94,14 +94,14 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     """Create events for a failed PRD generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.PRODUCT_MANAGER,
             phase=Phase.REQUIREMENTS,
             payload={"message": "Starting PRD generation"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.ERROR,
             agent=AgentRole.PRODUCT_MANAGER,
             phase=Phase.REQUIREMENTS,
@@ -113,9 +113,7 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     ]
 
 
-def _create_cost_entry(
-    tracker: TokenTracker, provider: str, model: str
-) -> CostEntry | None:
+def _create_cost_entry(tracker: TokenTracker, provider: str, model: str) -> CostEntry | None:
     """Create a cost entry from token tracking data."""
     if tracker.input_tokens == 0 and tracker.output_tokens == 0:
         return None
@@ -135,6 +133,7 @@ def _create_cost_entry(
 # =============================================================================
 # Legacy one-shot path (interactive=False)
 # =============================================================================
+
 
 async def _legacy_one_shot_pm(
     state: dict[str, Any],
@@ -156,7 +155,7 @@ async def _legacy_one_shot_pm(
         if hasattr(llm, "callbacks"):
             if llm.callbacks is None:
                 llm.callbacks = [tracker]
-            else:
+            elif isinstance(llm.callbacks, list):
                 llm.callbacks.append(tracker)
 
     chain, parser = build_agent_chain(
@@ -221,6 +220,7 @@ async def _legacy_one_shot_pm(
 # Conversational path helpers (interactive=True)
 # =============================================================================
 
+
 def _unwrap_json_response(text: str) -> str:
     """Strip JSON wrapping that small code models add despite prompt instructions.
 
@@ -257,8 +257,9 @@ def _unwrap_json_response(text: str) -> str:
 
     # Look for a single string field with a known wrapper key
     for key in ("message", "response", "content", "text", "reply", "answer"):
-        if key in parsed and isinstance(parsed[key], str):
-            return parsed[key]
+        value = parsed.get(key)
+        if isinstance(value, str):
+            return value
 
     # Single string value — use it directly
     if len(parsed) == 1:
@@ -273,9 +274,7 @@ def _unwrap_json_response(text: str) -> str:
     for k, v in parsed.items():
         lines.append(f"  • {k}: {v}")
     lines.append("")
-    lines.append(
-        "(If that's wrong, just type your answer in plain English.)"
-    )
+    lines.append("(If that's wrong, just type your answer in plain English.)")
     return "\n".join(lines)
 
 
@@ -294,7 +293,7 @@ async def _pm_clarify_turn(
         *history,
     ]
     response = await llm.ainvoke(messages)
-    return _unwrap_json_response(response.content)
+    return _unwrap_json_response(str(response.content))
 
 
 async def _pm_draft_prd(
@@ -315,9 +314,7 @@ async def _pm_draft_prd(
     parser = PydanticOutputParser(pydantic_object=PRD)
     format_instructions = parser.get_format_instructions()
 
-    system_text = PRODUCT_MANAGER_DRAFT_PROMPT.replace(
-        "{format_instructions}", format_instructions
-    )
+    system_text = PRODUCT_MANAGER_DRAFT_PROMPT.replace("{format_instructions}", format_instructions)
 
     messages: list[BaseMessage] = [
         SystemMessage(content=system_text),
@@ -329,7 +326,7 @@ async def _pm_draft_prd(
     for attempt in range(1, MAX_PARSE_RETRIES + 1):
         try:
             response = await llm.ainvoke(messages)
-            prd = parser.parse(response.content)
+            prd = parser.parse(str(response.content))
             return prd
         except Exception as e:
             last_error = e
@@ -351,9 +348,7 @@ async def _interactive_pm(
     history — so returning the full history would cause duplication.
     """
     role_key = AgentRole.PRODUCT_MANAGER.value
-    existing_history: list[BaseMessage] = list(
-        state.get("agent_messages", {}).get(role_key, [])
-    )
+    existing_history: list[BaseMessage] = list(state.get("agent_messages", {}).get(role_key, []))
     user_input: str | None = state.get("pending_user_input")
 
     if llm is None:
@@ -368,26 +363,30 @@ async def _interactive_pm(
                 "prd": prd,
                 "agent_status": "done",
                 "pending_user_input": None,
-                "events": [Event(
-                    timestamp=datetime.utcnow(),
-                    type=EventType.AGENT_END,
-                    agent=AgentRole.PRODUCT_MANAGER,
-                    phase=Phase.REQUIREMENTS,
-                    payload={"project_name": prd.project_name},
-                )],
+                "events": [
+                    Event(
+                        timestamp=now_utc(),
+                        type=EventType.AGENT_END,
+                        agent=AgentRole.PRODUCT_MANAGER,
+                        phase=Phase.REQUIREMENTS,
+                        payload={"project_name": prd.project_name},
+                    )
+                ],
             }
         except Exception as e:
             return {
                 "agent_status": "wait_for_input",
                 "pending_user_input": None,
                 "error": f"PM drafting failed: {e}",
-                "events": [Event(
-                    timestamp=datetime.utcnow(),
-                    type=EventType.ERROR,
-                    agent=AgentRole.PRODUCT_MANAGER,
-                    phase=Phase.REQUIREMENTS,
-                    payload={"error": str(e)},
-                )],
+                "events": [
+                    Event(
+                        timestamp=now_utc(),
+                        type=EventType.ERROR,
+                        agent=AgentRole.PRODUCT_MANAGER,
+                        phase=Phase.REQUIREMENTS,
+                        payload={"error": str(e)},
+                    )
+                ],
             }
 
     # --- Turn cap: force ready_to_draft after MAX_PM_TURNS ---
@@ -397,13 +396,15 @@ async def _interactive_pm(
         return {
             "agent_status": "ready_to_draft",
             "pending_user_input": None,
-            "events": [Event(
-                timestamp=datetime.utcnow(),
-                type=EventType.AGENT_TURN_LIMIT,
-                agent=AgentRole.PRODUCT_MANAGER,
-                phase=Phase.REQUIREMENTS,
-                payload={"reason": "max_turns_reached", "turns": MAX_PM_TURNS},
-            )],
+            "events": [
+                Event(
+                    timestamp=now_utc(),
+                    type=EventType.AGENT_TURN_LIMIT,
+                    agent=AgentRole.PRODUCT_MANAGER,
+                    phase=Phase.REQUIREMENTS,
+                    payload={"reason": "max_turns_reached", "turns": MAX_PM_TURNS},
+                )
+            ],
         }
 
     # --- Build the new messages for this turn ---
@@ -463,19 +464,22 @@ async def _interactive_pm(
         "agent_messages": {role_key: new_messages},
         "agent_status": "ready_to_draft" if suggests_drafting else "wait_for_input",
         "pending_user_input": None,
-        "events": [Event(
-            timestamp=datetime.utcnow(),
-            type=EventType.AGENT_TURN,
-            agent=AgentRole.PRODUCT_MANAGER,
-            phase=Phase.REQUIREMENTS,
-            payload={"suggests_drafting": suggests_drafting},
-        )],
+        "events": [
+            Event(
+                timestamp=now_utc(),
+                type=EventType.AGENT_TURN,
+                agent=AgentRole.PRODUCT_MANAGER,
+                phase=Phase.REQUIREMENTS,
+                payload={"suggests_drafting": suggests_drafting},
+            )
+        ],
     }
 
 
 # =============================================================================
 # Public node entry point
 # =============================================================================
+
 
 async def product_manager_node(
     state: dict[str, Any],
@@ -501,7 +505,7 @@ async def product_manager_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     agent=AgentRole.PRODUCT_MANAGER,
                     phase=Phase.REQUIREMENTS,
@@ -513,6 +517,7 @@ async def product_manager_node(
 
     if config is None:
         from loom.config import load_config
+
         config = load_config()
 
     if state.get("interactive"):

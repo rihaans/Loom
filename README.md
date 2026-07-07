@@ -1,17 +1,47 @@
 # Loom — Autonomous Software Development Team
 
-> Type a project idea. Watch six AI agents collaborate. Walk away with a working, tested, containerized MVP.
+> Type a project idea. Watch a team of AI agents collaborate — generate, **review each other's work**, and self-correct. Walk away with a working, tested, containerized MVP.
 
-Loom is a multi-agent system built on **LangChain + LangGraph** that takes a natural-language project description and produces a complete codebase: PRD → architecture → parallel-built frontend + backend → tests run in a Docker sandbox → Dockerfile + CI/CD → architectural decision records.
+Loom is a multi-agent system built on **LangGraph** (orchestration / state machine) and **LangChain** (provider-agnostic LLM layer) that takes a natural-language project description and produces a complete codebase: PRD → architecture → parallel-built frontend + backend → **automated code review with a generator–critic loop** → tests run in a Docker sandbox → Dockerfile + CI/CD → architectural decision records.
+
+Agents don't just run in sequence — the **Code Reviewer** critiques the generated code and dynamically hands work back to the developers (for code defects) or *upstream* to the architect (for design defects), using LangGraph `Command` handoffs, bounded so the loop always terminates.
 
 The whole pipeline runs interactively as a **chat REPL** (the primary interface, like Claude Code) or non-interactively with a single command (for CI and scripting).
 
 ---
 
+## Screenshots
+
+### Chat REPL — the primary interface
+
+A restrained, premium terminal: near-monochrome on charcoal with a single soft accent, quiet threaded message rails, and one subtle nod to the name — a woven "thread" hairline under the wordmark. The whole conversation — scoping, artifacts, the live pipeline, the reviewer's verdict, and the build summary — reads as one calm, cohesive transcript.
+
+<p align="center">
+  <img src="docs/screenshots/terminal.png" alt="Loom chat REPL — full transcript" width="760">
+</p>
+
+Typing `/` pops a command menu, and `/help`, `/status`, and `/cost` render as clean panels (the cost view breaks spend down per agent as a quiet share bar):
+
+<p align="center">
+  <img src="docs/screenshots/commands.png" alt="Loom slash-command menu, /help, /status and /cost panels" width="720">
+</p>
+
+### Web dashboard (`loom ui`)
+
+A real-time view of a build: the agent graph (with the Code Reviewer's `revise` / `escalate` feedback loops), live progress, cost, and artifacts.
+
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Loom dashboard — home" width="860"><br><br>
+  <img src="docs/screenshots/build.png" alt="Loom dashboard — live build graph" width="860">
+</p>
+
+---
+
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [What Loom Does](#what-loom-does)
-- [The Six Agents](#the-six-agents)
+- [The Agents](#the-agents)
 - [Workflow](#workflow)
 - [Quick Start](#quick-start)
 - [Setup](#setup)
@@ -41,6 +71,9 @@ You: "build me a CLI tool that converts markdown files to PDF"
    │  💻 Frontend Dev   ─┐                                 │
    │                     ├─ run in parallel via Send API   │
    │  ⚙  Backend Dev    ─┘                                 │
+   │  🔍 Code Reviewer    · critiques code, then routes:   │
+   │       ↳ defect → devs   ↳ design flaw → architect     │
+   │       ↳ ok → QA      (generator–critic, bounded loop) │
    │  🧪 QA Engineer     · writes + runs tests in Docker   │
    │       ↓ (fail? feedback loop, max 2 retries)          │
    │  🚀 DevOps          · Dockerfile + docker-compose + CI│
@@ -63,9 +96,9 @@ You can `cd` into the output folder and `docker-compose up` to run the app immed
 
 ---
 
-## The Six Agents
+## The Agents
 
-Each agent is a node in a stateful LangGraph state machine. They exchange typed Pydantic artifacts (PRDs, ArchitectureDocs, FileBundles, TestReports), not free-form chat.
+Each agent is a node in a stateful LangGraph state machine. They exchange typed Pydantic artifacts (PRDs, ArchitectureDocs, FileBundles, ReviewReports, TestReports), not free-form chat. Artifacts are produced with the model's **native structured-output mode** (tool/JSON calling) rather than parsing JSON out of free text — see [ADR 0001](.docs/adrs/0001-native-structured-output.md).
 
 | # | Agent | Role | Input | Output |
 |---|---|---|---|---|
@@ -73,14 +106,17 @@ Each agent is a node in a stateful LangGraph state machine. They exchange typed 
 | 2 | **Architect** 🏗 | Proposes stack & API design | PRD + memory context | `ArchitectureDoc` (stack, endpoints, components) |
 | 3 | **Frontend Dev** 💻 | Generates UI code | PRD + Architecture | `FileBundle` of frontend files |
 | 4 | **Backend Dev** ⚙ | Generates API + DB code | PRD + Architecture | `FileBundle` of backend files |
-| 5 | **QA Engineer** 🧪 | Writes & runs tests in Docker | All code | `TestReport` + retry feedback if any fail |
-| 6 | **DevOps Engineer** 🚀 | Containerization + CI | All artifacts | Dockerfile, docker-compose.yml, GH Actions |
+| 5 | **Code Reviewer** 🔍 | Critiques the build, then hands off | All code + PRD + Architecture | `ReviewReport` (approve / revise / escalate) |
+| 6 | **QA Engineer** 🧪 | Writes & runs tests in Docker | All code | `TestReport` + retry feedback if any fail |
+| 7 | **DevOps Engineer** 🚀 | Containerization + CI | All artifacts | Dockerfile, docker-compose.yml, GH Actions |
 
 **Two more nodes** support the pipeline (not really "agents" but graph nodes):
 - **Memory Retriever** 🧠 — vector-similarity search over past builds, injects context into the architect's prompt
 - **Memory Persister** 💾 — stores the build artifacts back into the vector store on success
 
-**Conversational vs. one-shot:** PM and Architect run in *conversational mode* during chat (multi-turn back-and-forth, then commit); the other four run in *one-shot mode* (single LLM call → artifact). When invoked via `loom build "..."` everything runs one-shot.
+**Conversational vs. one-shot:** PM and Architect run in *conversational mode* during chat (multi-turn back-and-forth, then commit); the other five run in *one-shot mode* (single LLM call → artifact). When invoked via `loom build "..."` everything runs one-shot.
+
+**The generator–critic loop:** after the developers produce code, the **Code Reviewer** judges it as a whole against the PRD and architecture and returns a `ReviewReport`. Based on its verdict it issues a LangGraph `Command` handoff — approve → QA, code defect → back to the targeted developer(s), or design defect → *upstream* to the Architect to revise the stack. The loop is bounded by `max_review_iterations` so it always terminates, and a reviewer failure degrades gracefully to QA. See [ADR 0002](.docs/adrs/0002-code-reviewer-generator-critic-loop.md) and [ADR 0003](.docs/adrs/0003-command-based-handoffs.md).
 
 ---
 
@@ -102,14 +138,19 @@ The pipeline is a [LangGraph state machine](https://langchain-ai.github.io/langg
                     │    Architect     │ ────────┘
                     └─────────┬────────┘
                               │
-                ┌─────────────┴─────────────┐
-                │   parallel via Send API   │
-                ▼                           ▼
-       ┌──────────────┐            ┌──────────────┐
-       │ Frontend Dev │            │  Backend Dev │
-       └───────┬──────┘            └──────┬───────┘
-               └────────────┬─────────────┘
-                            ▼
+                ┌─────────────┴─────────────┐   ▲          ▲
+                │   parallel via Send API   │   │ escalate  │ revise
+                ▼                           ▼   │ (design)  │ (code)
+       ┌──────────────┐            ┌──────────────┐         │
+       │ Frontend Dev │            │  Backend Dev │ ◀───────┤
+       └───────┬──────┘            └──────┬───────┘         │
+               └────────────┬─────────────┘                 │
+                            ▼                                │
+                    ┌──────────────┐   not approved?         │
+                    │ Code Reviewer│ ────────────────────────┘
+                    └──────┬───────┘   (Command handoff, max N)
+                           │ approved
+                           ▼
                     ┌──────────────┐
                     │ QA Engineer  │ ──────┐
                     └──────┬───────┘       │ tests fail?
@@ -127,9 +168,13 @@ The pipeline is a [LangGraph state machine](https://langchain-ai.github.io/langg
                           END
 ```
 
+(The reviewer's "escalate" edge routes back up to the Architect, which then re-fans to the developers — omitted from the ASCII for clarity; see [ADR 0002](.docs/adrs/0002-code-reviewer-generator-critic-loop.md).)
+
 **Key LangGraph patterns used:**
 - **Conditional edges** — routing decisions based on state (e.g., did tests pass?)
-- **Send API** — Frontend & Backend devs run truly in parallel, not sequentially
+- **`Command` handoffs** — the Code Reviewer node returns `Command(goto=…, update=…)` to dynamically route to QA, a developer (`Send`), or the architect — the modern post-conditional-edge idiom
+- **Send API** — Frontend & Backend devs run truly in parallel; also used to fan revisions back to specific devs
+- **Generator–critic loop** — the reviewer critiques dev output and bounces it back, bounded by `max_review_iterations`
 - **`interrupt_after`** — chat REPL pauses after each PM/Architect turn so you can talk
 - **Checkpointing** — state persists between turns so you can resume sessions
 - **Retry loops** — QA failure feeds error context back to devs, up to N attempts
@@ -455,7 +500,7 @@ model = "qwen2.5-coder:7b"      # mostly templated, free is fine
 - **FastAPI + React** — optional web dashboard (`loom ui`)
 - **Docker** — code execution sandbox for QA tests
 - **SQLite + LanceDB** — checkpointing and vector memory
-- **pytest** — 427+ tests covering state, agents, graph, and chat flow
+- **pytest** — 475+ tests covering state, agents, graph, the review loop, and chat flow
 
 ### How agents talk
 
@@ -464,12 +509,13 @@ Agents don't free-form chat with each other. They exchange **typed Pydantic arti
 ```
 PM             →  PRD                 →  Architect
 Architect      →  ArchitectureDoc     →  Frontend + Backend Devs
-Devs           →  FileBundle          →  QA Engineer
+Devs           →  FileBundle          →  Code Reviewer
+Code Reviewer  →  ReviewReport        →  QA  ·  or back to Devs  ·  or up to Architect
 QA             →  TestReport          →  DevOps (or back to Devs)
 DevOps         →  DevOpsBundle        →  Memory Persist → END
 ```
 
-If a parser fails on bad LLM output, that agent retries with the parse error fed back as feedback (up to 3 attempts per agent).
+Artifacts are produced via native structured output (`with_structured_output`), so the model is constrained to the schema rather than emitting JSON as free text. If a provider lacks structured output, Loom falls back to a text parser; on bad output the agent retries with the parse error fed back as feedback (up to 3 attempts per agent). See [ADR 0001](.docs/adrs/0001-native-structured-output.md).
 
 ### State management
 
@@ -517,10 +563,12 @@ src/loom/
 │   ├── backend_dev.py
 │   ├── frontend_dev.py
 │   ├── product_manager.py    ← chat-mode + legacy paths
+│   ├── reviewer.py           ← Code Reviewer (generator–critic, Command handoffs)
 │   ├── qa_engineer.py
 │   ├── devops_engineer.py
 │   ├── memory_retrieve.py
 │   ├── memory_persist.py
+│   ├── base.py               ← build_agent_chain + structured-output binding
 │   └── prompts/              ← all system prompts
 ├── cli/
 │   ├── app.py                ← Typer CLI entry point
@@ -615,8 +663,10 @@ pytest --cov=src/loom --cov-report=html
 
 **Test coverage:**
 - Pydantic models + reducers (state machine correctness)
-- Each agent node (mocked LLMs)
+- Each agent node (mocked LLMs), including the Code Reviewer's verdict handoffs
 - Graph builder + conditional routing
+- The generator–critic review loop end-to-end through the compiled graph (revise + escalate paths terminate)
+- Structured-output binding + parser fallback
 - Chat REPL: slash command parser, renderer snapshots, session state machine, full conversation flow
 - LLM cost estimation
 - Memory store + factory
@@ -627,8 +677,8 @@ The test suite uses **mocked LLMs** for unit tests and **fully scripted** end-to
 
 ### Current state
 
-- **427 tests passing**
-- 0 regressions on the legacy `loom build` path during chat REPL development
+- **475 tests passing**
+- 0 regressions on the legacy `loom build` path
 - Real-LLM e2e validation: manual
 
 ---
@@ -642,6 +692,7 @@ CodeCrew/
 ├── loom.example.toml        ← config template
 ├── .docs/                   ← design specs (PRD, AGENTS, GRAPH_DESIGN, etc.)
 │   ├── README.md
+│   ├── adrs/                ← architecture decision records (this project's own)
 │   ├── PROGRESS.md          ← live task tracker
 │   ├── IMPLEMENTATION_PLAN.md
 │   ├── PRD.md
@@ -673,11 +724,13 @@ CodeCrew/
 
 ## Status
 
-**Phases 0–9 complete.** The chat REPL works end-to-end through PM → Architect → parallel dev → QA → DevOps. 427 tests pass. Build outputs are runnable.
+**Phases 0–9 complete.** The chat REPL works end-to-end through PM → Architect → parallel dev → **Code Reviewer** → QA → DevOps. 475 tests pass. Build outputs are runnable.
 
 **What's working:**
 - ✅ Multi-turn conversational PM and Architect
 - ✅ Parallel frontend + backend code generation
+- ✅ **Code Reviewer agent — generator–critic loop with `Command` handoffs (revise → devs, escalate → architect), bounded**
+- ✅ **Native structured output (`with_structured_output`) with a text-parser fallback**
 - ✅ Docker sandbox QA with retry feedback
 - ✅ Containerization (Dockerfile + docker-compose + GH Actions)
 - ✅ ADR generation
@@ -686,15 +739,15 @@ CodeCrew/
 - ✅ Chat REPL with typewriter + spinner UX
 - ✅ Transcript persistence + replay
 - ✅ Provider-agnostic LLM layer (Anthropic / OpenAI / Ollama)
-- ✅ 427 tests, zero regressions on legacy path
+- ✅ 475 tests, zero regressions on legacy path
 
 **Known limitations:**
 - Conversational quality with `qwen2.5-coder:7b` is rough (the model is code-tuned, not chat-tuned). Use `llama3.1:8b` or Claude/GPT for smoother chat.
-- Real-time token streaming from the LLM isn't wired into the renderer yet — current "typewriter" effect uses pre-computed responses.
+- The chat REPL animates each agent reply with a typewriter effect over the *completed* response, not live per-token streaming. Real token streaming is intentionally deferred for the conversational agents because the PM's reply protocol wraps text in JSON (`{"message": …}`) that is unwrapped after the call — streaming raw tokens would surface the JSON. The streaming infrastructure (`astream_events` → typed events) exists in `observability/` for the non-interactive build path.
 - The web dashboard (`loom ui`) is functional but not fully polished.
 
 **Roadmap:**
-- Real LLM token streaming into the renderer
+- Stream the Architect's (plain-text) turns live, and migrate the PM reply protocol off JSON-wrapping so it can stream too
 - File-write confirmation gate before `output/` materialization
 - Better error panels for Docker / Ollama / API failures
 - 90-second demo screencap

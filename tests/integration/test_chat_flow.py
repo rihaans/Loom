@@ -19,7 +19,6 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from loom.cli.chat.commands import SlashCommand
 from loom.cli.chat.session import ChatSession
 from loom.config import LoomConfig
 from loom.state.models import (
@@ -32,6 +31,7 @@ from loom.state.models import (
 
 def _make_renderer_mock() -> MagicMock:
     """Build a renderer mock with a working `thinking()` context manager."""
+
     @contextmanager
     def _noop_thinking(label: str = "thinking"):
         yield
@@ -68,9 +68,7 @@ class TestChatFlow:
     """Full chat-session flow with mocked agents and scripted input."""
 
     @pytest.mark.asyncio
-    async def test_quit_immediately_after_first_message(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_quit_immediately_after_first_message(self, tmp_path: Path) -> None:
         """User types initial message → first PM turn → user quits."""
 
         async def fake_pm(state, config=None, llm=None):
@@ -101,9 +99,8 @@ class TestChatFlow:
         )
         # Redirect transcript to tmp_path
         from loom.cli.chat.transcript import get_chat_path
-        session._transcript_path = get_chat_path(
-            "test-quit", base_dir=tmp_path
-        )
+
+        session._transcript_path = get_chat_path("test-quit", base_dir=tmp_path)
 
         with patch(
             "loom.graph.builder.product_manager_node",
@@ -125,6 +122,7 @@ class TestChatFlow:
     @pytest.mark.asyncio
     async def test_done_dispatches_draft_and_persists(self, tmp_path: Path) -> None:
         """Verify /done is parsed as a draft signal and __DRAFT__ is sent to graph."""
+
         async def fake_pm(state, config=None, llm=None):
             user_input = state.get("pending_user_input")
             if user_input == "__DRAFT__":
@@ -158,6 +156,7 @@ class TestChatFlow:
             thread_id="test-done",
         )
         from loom.cli.chat.transcript import get_chat_path
+
         session._transcript_path = get_chat_path("test-done", base_dir=tmp_path)
 
         # Spy on aupdate_state to verify __DRAFT__ was injected into state
@@ -177,6 +176,7 @@ class TestChatFlow:
                     # Initialize the graph first by calling run partially.
                     # We instead inspect the transcript afterwards as proof.
                     return await session.run()
+
                 await _run()
             except Exception:
                 pass
@@ -190,6 +190,7 @@ class TestChatFlow:
     @pytest.mark.asyncio
     async def test_slash_help_does_not_advance_graph(self, tmp_path: Path) -> None:
         """A /help slash command should not trigger a graph step."""
+
         async def fake_pm(state, config=None, llm=None):
             return {
                 "agent_messages": {
@@ -217,6 +218,7 @@ class TestChatFlow:
             thread_id="test-help",
         )
         from loom.cli.chat.transcript import get_chat_path
+
         session._transcript_path = get_chat_path("test-help", base_dir=tmp_path)
 
         pm_mock = AsyncMock(side_effect=fake_pm)

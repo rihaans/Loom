@@ -15,13 +15,10 @@ from loom.agents.architect import (
     architect_node,
 )
 from loom.config import LoomConfig
-from loom.state.enums import AgentRole, EventType
+from loom.state.enums import EventType
 from loom.state.models import (
     PRD,
-    APIEndpoint,
     ArchitectureDoc,
-    Component,
-    HttpMethod,
     Priority,
     ProjectType,
     TechChoice,
@@ -29,10 +26,10 @@ from loom.state.models import (
     UserStory,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_config() -> LoomConfig:
     return LoomConfig()
@@ -168,9 +165,7 @@ class TestReviseMode:
             HumanMessage(content="Please propose a stack."),
             AIMessage(content="Stack: FastAPI + React + SQLite. Sound good?"),
         ]
-        mock_llm = _make_mock_llm(
-            "Stack: FastAPI + React + Postgres + JWT. Sound good?"
-        )
+        mock_llm = _make_mock_llm("Stack: FastAPI + React + Postgres + JWT. Sound good?")
 
         state = {
             "interactive": True,
@@ -242,10 +237,12 @@ class TestRevisionCap:
         """Revision cap should emit AGENT_TURN_LIMIT."""
         history: list[Any] = []
         for i in range(MAX_ARCHITECT_REVISIONS):
-            history.extend([
-                HumanMessage(content=f"f{i}"),
-                AIMessage(content=f"p{i}"),
-            ])
+            history.extend(
+                [
+                    HumanMessage(content=f"f{i}"),
+                    AIMessage(content=f"p{i}"),
+                ]
+            )
 
         state = {
             "interactive": True,
@@ -263,10 +260,12 @@ class TestRevisionCap:
         """One revision below the cap should still call the LLM."""
         history: list[Any] = []
         for i in range(MAX_ARCHITECT_REVISIONS - 1):
-            history.extend([
-                HumanMessage(content=f"f{i}"),
-                AIMessage(content=f"p{i}"),
-            ])
+            history.extend(
+                [
+                    HumanMessage(content=f"f{i}"),
+                    AIMessage(content=f"p{i}"),
+                ]
+            )
         mock_llm = _make_mock_llm("Stack: revised. Sound good?")
 
         state = {
@@ -393,8 +392,10 @@ class TestLegacyPath:
         """interactive=False must produce an ArchitectureDoc in one shot."""
         arch_mock = _make_arch_mock()
 
-        with patch("loom.agents.architect.build_agent_chain") as mock_chain_fn, \
-             patch("loom.agents.architect.get_llm_for_role"):
+        with (
+            patch("loom.agents.architect.build_agent_chain") as mock_chain_fn,
+            patch("loom.agents.architect.get_llm_for_role"),
+        ):
             chain = MagicMock()
             chain.ainvoke = AsyncMock(return_value=arch_mock)
             parser = MagicMock()
@@ -418,8 +419,10 @@ class TestLegacyPath:
         """interactive=False must not write to agent_messages."""
         arch_mock = _make_arch_mock()
 
-        with patch("loom.agents.architect.build_agent_chain") as mock_chain_fn, \
-             patch("loom.agents.architect.get_llm_for_role"):
+        with (
+            patch("loom.agents.architect.build_agent_chain") as mock_chain_fn,
+            patch("loom.agents.architect.get_llm_for_role"),
+        ):
             chain = MagicMock()
             chain.ainvoke = AsyncMock(return_value=arch_mock)
             parser = MagicMock()
@@ -440,8 +443,10 @@ class TestLegacyPath:
         """interactive=False must not set agent_status."""
         arch_mock = _make_arch_mock()
 
-        with patch("loom.agents.architect.build_agent_chain") as mock_chain_fn, \
-             patch("loom.agents.architect.get_llm_for_role"):
+        with (
+            patch("loom.agents.architect.build_agent_chain") as mock_chain_fn,
+            patch("loom.agents.architect.get_llm_for_role"),
+        ):
             chain = MagicMock()
             chain.ainvoke = AsyncMock(return_value=arch_mock)
             parser = MagicMock()

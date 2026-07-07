@@ -3,13 +3,11 @@
 Tests graph building and routing logic.
 """
 
-import pytest
 from unittest.mock import Mock
 
 from loom.config import LoomConfig
 from loom.graph.builder import build_linear_graph, compile_graph
-from loom.graph.routing import route_after_pm, route_after_qa, route_after_devops
-from loom.state.enums import Phase
+from loom.graph.routing import route_after_devops, route_after_pm, route_after_qa
 
 
 class TestGraphBuilder:

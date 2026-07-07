@@ -90,7 +90,8 @@ rate_limit_retry = retry(
     wait=wait_random_exponential(multiplier=1, min=4, max=60),
     stop=stop_after_attempt(5),
     before_sleep=lambda retry_state: logger.warning(
-        f"Rate limited, retrying in {retry_state.next_action.sleep}s "
+        f"Rate limited, retrying in "
+        f"{retry_state.next_action.sleep if retry_state.next_action else '?'}s "
         f"(attempt {retry_state.attempt_number}/5)"
     ),
 )
@@ -201,7 +202,7 @@ Error: {error_message}
 
 Your response was:
 ```
-{raw_output[:500]}{'...' if len(raw_output) > 500 else ''}
+{raw_output[:500]}{"..." if len(raw_output) > 500 else ""}
 ```
 
 Please provide a valid JSON response matching the required schema.

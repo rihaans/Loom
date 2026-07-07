@@ -3,6 +3,8 @@
 import os
 from typing import TYPE_CHECKING
 
+from pydantic import SecretStr
+
 from loom.config.models import LLMConfig
 
 if TYPE_CHECKING:
@@ -40,11 +42,11 @@ def create_anthropic_llm(
             "or provide api_key in config."
         )
 
-    return ChatAnthropic(
+    return ChatAnthropic(  # type: ignore[call-arg]
         model=config.model,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         callbacks=callbacks,
     )
 
@@ -79,11 +81,11 @@ def create_openai_llm(
             "or provide api_key in config."
         )
 
-    return ChatOpenAI(
+    return ChatOpenAI(  # type: ignore[call-arg]
         model=config.model,
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         callbacks=callbacks,
     )
 
@@ -146,6 +148,5 @@ def create_llm(
         return create_ollama_llm(config, callbacks)
     else:
         raise ValueError(
-            f"Unknown LLM provider: '{provider}'. "
-            f"Supported providers: anthropic, openai, ollama"
+            f"Unknown LLM provider: '{provider}'. Supported providers: anthropic, openai, ollama"
         )

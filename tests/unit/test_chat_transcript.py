@@ -50,17 +50,26 @@ class TestAppendEvent:
 
     def test_handles_pydantic_model(self, tmp_path: Path) -> None:
         from loom.state.models import (
-            PRD, Priority, ProjectType, UserStory,
+            PRD,
+            Priority,
+            ProjectType,
+            UserStory,
         )
 
         prd = PRD(
-            project_name="X", project_slug="x",
+            project_name="X",
+            project_slug="x",
             project_type=ProjectType.REST_API,
-            one_liner="x", target_users=["u"],
+            one_liner="x",
+            target_users=["u"],
             user_stories=[
                 UserStory(
-                    id="US-001", role="u", goal="g", benefit="b",
-                    acceptance_criteria=["a"], priority=Priority.P0,
+                    id="US-001",
+                    role="u",
+                    goal="g",
+                    benefit="b",
+                    acceptance_criteria=["a"],
+                    priority=Priority.P0,
                 )
             ],
             must_have_features=["f"],

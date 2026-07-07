@@ -5,9 +5,9 @@ Persists successful builds to the memory store after DevOps completes.
 
 import logging
 import uuid
-from datetime import datetime
 from typing import Any
 
+from loom._time import now_utc
 from loom.config import LoomConfig
 from loom.memory.factory import get_embedder, get_memory_store, is_memory_available
 from loom.memory.models import MemoryConfig, MemoryRecord
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def _create_persist_event(run_id: str, success: bool) -> Event:
     """Create an event for memory persistence."""
     return Event(
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         type=EventType.AGENT_END if success else EventType.ERROR,
         phase=Phase.DONE,
         payload={
@@ -49,6 +49,7 @@ async def memory_persist_node(
     # Get or create config
     if config is None:
         from loom.config import load_config
+
         config = load_config()
 
     memory_config: MemoryConfig = getattr(config, "memory", MemoryConfig())
@@ -119,7 +120,7 @@ async def memory_persist_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     phase=Phase.DONE,
                     payload={"error": f"Memory persistence failed: {e}"},

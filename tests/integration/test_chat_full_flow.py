@@ -13,10 +13,9 @@ Walks the chat session through:
 This is the full happy-path flow exercised end-to-end with mocked LLMs.
 """
 
-import asyncio
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,6 +25,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 def _make_renderer_mock() -> MagicMock:
     """Build a renderer mock with a working `thinking()` context manager."""
+
     @contextmanager
     def _noop_thinking(label: str = "thinking"):
         yield
@@ -35,6 +35,7 @@ def _make_renderer_mock() -> MagicMock:
     renderer.thinking = _noop_thinking
     renderer.render_agent_message_animated = AsyncMock()
     return renderer
+
 
 from loom.cli.chat.session import ChatSession, looks_affirmative
 from loom.config import LoomConfig
@@ -47,7 +48,6 @@ from loom.state.models import (
     TechLayer,
     UserStory,
 )
-
 
 # ---------------------------------------------------------------------------
 # Affirmative detection unit tests
@@ -83,12 +83,10 @@ class TestLooksAffirmative:
         assert looks_affirmative("lgtm") is True
 
     def test_long_prose_not_affirmative(self) -> None:
-        assert looks_affirmative(
-            "yes but I want to also include the auth feature"
-        ) is False  # too long, real content
-        assert looks_affirmative(
-            "build me a simple cli tool"
-        ) is False
+        assert (
+            looks_affirmative("yes but I want to also include the auth feature") is False
+        )  # too long, real content
+        assert looks_affirmative("build me a simple cli tool") is False
 
     def test_negative_not_affirmative(self) -> None:
         assert looks_affirmative("no") is False
@@ -204,16 +202,18 @@ class TestFullChatFlow:
             thread_id="full-flow-yes",
         )
         from loom.cli.chat.transcript import get_chat_path
-        session._transcript_path = get_chat_path(
-            "full-flow-yes", base_dir=tmp_path
-        )
 
-        with patch(
-            "loom.graph.builder.product_manager_node",
-            new=AsyncMock(side_effect=fake_pm),
-        ), patch(
-            "loom.graph.builder.architect_node",
-            new=AsyncMock(side_effect=fake_arch),
+        session._transcript_path = get_chat_path("full-flow-yes", base_dir=tmp_path)
+
+        with (
+            patch(
+                "loom.graph.builder.product_manager_node",
+                new=AsyncMock(side_effect=fake_pm),
+            ),
+            patch(
+                "loom.graph.builder.architect_node",
+                new=AsyncMock(side_effect=fake_arch),
+            ),
         ):
             try:
                 await session.run()
@@ -224,8 +224,7 @@ class TestFullChatFlow:
         # then with "__DRAFT__" because we typed "yes" which got translated.
         draft_calls = [c for c in pm_calls if c["user_input"] == "__DRAFT__"]
         assert len(draft_calls) >= 1, (
-            f"Plain 'yes' should have triggered drafting. "
-            f"PM calls were: {pm_calls}"
+            f"Plain 'yes' should have triggered drafting. PM calls were: {pm_calls}"
         )
 
     @pytest.mark.asyncio
@@ -276,14 +275,18 @@ class TestFullChatFlow:
             thread_id="done-word",
         )
         from loom.cli.chat.transcript import get_chat_path
+
         session._transcript_path = get_chat_path("done-word", base_dir=tmp_path)
 
-        with patch(
-            "loom.graph.builder.product_manager_node",
-            new=AsyncMock(side_effect=fake_pm),
-        ), patch(
-            "loom.graph.builder.architect_node",
-            new=AsyncMock(side_effect=fake_arch),
+        with (
+            patch(
+                "loom.graph.builder.product_manager_node",
+                new=AsyncMock(side_effect=fake_pm),
+            ),
+            patch(
+                "loom.graph.builder.architect_node",
+                new=AsyncMock(side_effect=fake_arch),
+            ),
         ):
             try:
                 await session.run()
@@ -295,9 +298,7 @@ class TestFullChatFlow:
         )
 
     @pytest.mark.asyncio
-    async def test_long_prose_is_not_treated_as_affirmative(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_long_prose_is_not_treated_as_affirmative(self, tmp_path: Path) -> None:
         """Long replies should be passed through to the PM, not auto-drafted."""
         pm_calls: list[str | None] = []
 
@@ -323,9 +324,7 @@ class TestFullChatFlow:
                 "pending_user_input": None,
             }
 
-        long_input = (
-            "yes but I want to make it support multiple files and have a watch mode"
-        )
+        long_input = "yes but I want to make it support multiple files and have a watch mode"
         inputs = ["build a tool", long_input, "/quit"]
         renderer = _make_renderer_mock()
         input_reader = MagicMock()
@@ -339,14 +338,18 @@ class TestFullChatFlow:
             thread_id="long-prose",
         )
         from loom.cli.chat.transcript import get_chat_path
+
         session._transcript_path = get_chat_path("long-prose", base_dir=tmp_path)
 
-        with patch(
-            "loom.graph.builder.product_manager_node",
-            new=AsyncMock(side_effect=fake_pm),
-        ), patch(
-            "loom.graph.builder.architect_node",
-            new=AsyncMock(side_effect=fake_arch),
+        with (
+            patch(
+                "loom.graph.builder.product_manager_node",
+                new=AsyncMock(side_effect=fake_pm),
+            ),
+            patch(
+                "loom.graph.builder.architect_node",
+                new=AsyncMock(side_effect=fake_arch),
+            ),
         ):
             try:
                 await session.run()

@@ -3,6 +3,7 @@
 import asyncio
 import sys
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -53,6 +54,7 @@ def main(
     config = load_config()
     if model:
         from loom.config import parse_llm_string
+
         config.llm_default = parse_llm_string(model)
 
     renderer = ChatRenderer(console=console, plain=plain)
@@ -77,8 +79,12 @@ def build(
     output_dir: str = typer.Option("./output", "--output", "-o", help="Output directory"),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Enable interactive mode"),
     plain: bool = typer.Option(False, "--plain", help="Plain output (no TUI)"),
-    model: str = typer.Option(None, "--model", "-m", help="LLM model override (e.g., anthropic:claude-sonnet-4-20250514)"),
-    no_memory: bool = typer.Option(False, "--no-memory", help="Disable memory system for this build"),
+    model: str = typer.Option(
+        None, "--model", "-m", help="LLM model override (e.g., anthropic:claude-sonnet-4-20250514)"
+    ),
+    no_memory: bool = typer.Option(
+        False, "--no-memory", help="Disable memory system for this build"
+    ),
     no_adrs: bool = typer.Option(False, "--no-adrs", help="Disable ADR generation in output"),
 ) -> None:
     """Build a project from a natural language description."""
@@ -91,6 +97,7 @@ def build(
     config = load_config()
     if model:
         from loom.config import parse_llm_string
+
         config.llm_default = parse_llm_string(model)
 
     # Disable memory if requested
@@ -136,6 +143,7 @@ def build(
         # TUI mode
         try:
             from loom.cli.tui import run_build_tui
+
             run_build_tui(description, config, output_dir, interactive)
         except ImportError:
             console.print("[yellow]TUI not available, using plain mode[/yellow]")
@@ -185,9 +193,11 @@ def sandbox_build() -> None:
     console.print("[bold]Building sandbox image...[/bold]")
 
     try:
+        from loom.sandbox.models import SandboxConfig
         from loom.sandbox.runner import SandboxRunner
+
         runner = SandboxRunner.__new__(SandboxRunner)
-        runner.config = None
+        runner.config = SandboxConfig()
         runner._initialize_docker()
 
         # Get project root
@@ -197,6 +207,7 @@ def sandbox_build() -> None:
             raise typer.Exit(1)
 
         from loom.sandbox.models import SandboxConfig
+
         runner.config = SandboxConfig()
         if runner.build_image(dockerfile):
             console.print("[green][OK] Sandbox image built successfully[/green]")
@@ -244,16 +255,15 @@ def sandbox_info() -> None:
     table.add_column("Status", style="green")
 
     table.add_row(
-        "Docker Available",
-        "[green]Yes[/green]" if info["docker_available"] else "[red]No[/red]"
+        "Docker Available", "[green]Yes[/green]" if info["docker_available"] else "[red]No[/red]"
     )
     table.add_row(
         "Sandbox Image",
-        "[green]Built[/green]" if info["docker_image_exists"] else "[yellow]Not built[/yellow]"
+        "[green]Built[/green]" if info["docker_image_exists"] else "[yellow]Not built[/yellow]",
     )
     table.add_row(
         "Subprocess Fallback",
-        "[yellow]Enabled[/yellow]" if info["subprocess_enabled"] else "[dim]Disabled[/dim]"
+        "[yellow]Enabled[/yellow]" if info["subprocess_enabled"] else "[dim]Disabled[/dim]",
     )
 
     console.print(table)
@@ -312,11 +322,12 @@ def config_init(
     example = Path(__file__).parent.parent.parent.parent / "loom.example.toml"
     if example.exists():
         import shutil
+
         shutil.copy(example, config_file)
         console.print(f"[green][OK] Created config file:[/green] {config_file}")
     else:
         # Create minimal config
-        config_file.write_text('''# Loom Configuration
+        config_file.write_text("""# Loom Configuration
 
 [llm]
 provider = "ollama"
@@ -326,7 +337,7 @@ temperature = 0.7
 [build]
 output_dir = "./output"
 max_retries = 2
-''')
+""")
         console.print(f"[green][OK] Created config file:[/green] {config_file}")
 
 
@@ -348,13 +359,17 @@ def ui(
         if frontend_dist.exists():
             console.print(f"  Frontend: {frontend_dist}")
             from loom.server.main import mount_static_files
+
             mount_static_files(frontend_dist)
         else:
-            console.print("[yellow]  Frontend not built. Run 'cd frontend && npm run build' or use --dev[/yellow]")
+            console.print(
+                "[yellow]  Frontend not built. Run 'cd frontend && npm run build' or use --dev[/yellow]"
+            )
 
     console.print("\n[dim]Press Ctrl+C to stop[/dim]\n")
 
     from loom.server.main import app as fastapi_app
+
     uvicorn.run(fastapi_app, host=host, port=port, log_level="info")
 
 
@@ -397,10 +412,13 @@ def doctor() -> None:
         )
         if result.returncode == 0 and "models" in result.stdout:
             import json
+
             data = json.loads(result.stdout)
             models = [m["name"] for m in data.get("models", [])]
             if models:
-                console.print(f"[green][OK][/green] Ollama running with models: {', '.join(models)}")
+                console.print(
+                    f"[green][OK][/green] Ollama running with models: {', '.join(models)}"
+                )
             else:
                 console.print("[yellow][--][/yellow] Ollama running but no models installed")
         else:
@@ -411,6 +429,7 @@ def doctor() -> None:
     # Check Docker
     console.print("\n[bold]Sandbox:[/bold]")
     from loom.sandbox import get_sandbox_info
+
     info = get_sandbox_info()
 
     if info["docker_available"]:
@@ -420,12 +439,15 @@ def doctor() -> None:
         else:
             console.print("[yellow][--][/yellow] Sandbox image not built (run: loom sandbox build)")
     else:
-        console.print("[yellow][--][/yellow] Docker not available (sandbox will use subprocess fallback)")
+        console.print(
+            "[yellow][--][/yellow] Docker not available (sandbox will use subprocess fallback)"
+        )
 
     # Chat-mode prerequisites (Phase 9)
     console.print("\n[bold]Chat REPL:[/bold]")
     try:
         import prompt_toolkit  # noqa: F401
+
         console.print("[green][OK][/green] prompt_toolkit installed")
     except ImportError:
         console.print(
@@ -433,11 +455,13 @@ def doctor() -> None:
         )
     try:
         import rich  # noqa: F401
+
         console.print("[green][OK][/green] rich installed")
     except ImportError:
         console.print("[red][FAIL][/red] rich missing — required for chat rendering")
     try:
         import aiosqlite  # noqa: F401
+
         console.print("[green][OK][/green] aiosqlite installed (chat checkpointing)")
     except ImportError:
         console.print(
@@ -448,18 +472,21 @@ def doctor() -> None:
     if sys.stdout.isatty():
         console.print("[green][OK][/green] Running in a TTY (chat will render correctly)")
     else:
-        console.print(
-            "[yellow][--][/yellow] Not a TTY — use --plain for accessibility / CI mode"
-        )
+        console.print("[yellow][--][/yellow] Not a TTY — use --plain for accessibility / CI mode")
 
     # Summary
     console.print("\n[bold]Recommendation:[/bold]")
     if anthropic_key or openai_key:
         console.print(
             "[green]Ready to build![/green] Run: [cyan]loom[/cyan] (chat) "
-            "or [cyan]loom build \"…\"[/cyan] (one-shot)"
+            'or [cyan]loom build "…"[/cyan] (one-shot)'
         )
-    elif subprocess.run(["curl", "-s", "http://localhost:11434/api/tags"], capture_output=True).returncode == 0:
+    elif (
+        subprocess.run(
+            ["curl", "-s", "http://localhost:11434/api/tags"], capture_output=True
+        ).returncode
+        == 0
+    ):
         console.print(
             "[green]Ready with Ollama![/green] Run: [cyan]loom --model ollama:qwen2.5-coder:7b[/cyan]"
         )
@@ -480,11 +507,14 @@ def estimate(
     config = load_config()
     if model:
         from loom.config import parse_llm_string
+
         config.llm_default = parse_llm_string(model)
 
     # estimate_build_cost returns a float (total cost in USD)
     estimated_tokens = 80_000  # Default assumption
-    estimated_cost = estimate_build_cost(config.llm_default.provider, config.llm_default.model, estimated_tokens)
+    estimated_cost = estimate_build_cost(
+        config.llm_default.provider, config.llm_default.model, estimated_tokens
+    )
 
     console.print(f"[bold]Cost Estimate for:[/bold] {description[:50]}...")
     console.print()
@@ -512,7 +542,9 @@ def estimate(
 def plan(
     description: str = typer.Argument(..., help="Project description"),
     save: Path = typer.Option(None, "--save", "-s", help="Save plan to this path"),
-    auto_build: bool = typer.Option(False, "--auto-build", help="Skip prompt and build immediately"),
+    auto_build: bool = typer.Option(
+        False, "--auto-build", help="Skip prompt and build immediately"
+    ),
     model: str = typer.Option(None, "--model", "-m", help="LLM model override"),
     no_memory: bool = typer.Option(False, "--no-memory", help="Disable memory system"),
 ) -> None:
@@ -532,13 +564,14 @@ def plan(
     config = load_config()
     if model:
         from loom.config import parse_llm_string
+
         config.llm_default = parse_llm_string(model)
     if no_memory:
         config.memory.enabled = False
 
     thread_id = str(uuid.uuid4())
 
-    async def run_plan():
+    async def run_plan() -> tuple[Any, Any, Any]:
         from loom.graph.builder import compile_graph
         from loom.graph.checkpoint import create_memory_checkpointer, get_checkpoint_config
         from loom.state.enums import Phase
@@ -613,7 +646,9 @@ def plan(
         console.print("  [E] Edit & rebuild plan")
         console.print("  [S] Save plan, build later")
         console.print("  [Q] Quit")
-        choice = Prompt.ask("Choice", choices=["B", "E", "S", "Q", "b", "e", "s", "q"], default="B").upper()
+        choice = Prompt.ask(
+            "Choice", choices=["B", "E", "S", "Q", "b", "e", "s", "q"], default="B"
+        ).upper()
 
     if choice == "Q":
         console.print("[dim]Plan discarded.[/dim]")
@@ -629,7 +664,7 @@ def plan(
     if choice == "E":
         feedback = Prompt.ask("What would you like to change?")
 
-        async def rerun_architect():
+        async def rerun_architect() -> Any:
             # Update state with feedback
             graph.update_state(run_config, {"architecture_feedback": feedback})
 
@@ -668,7 +703,7 @@ def plan(
     if choice == "B" or choice == "Y":
         console.print("\n[bold]Starting build...[/bold]")
 
-        async def continue_build():
+        async def continue_build() -> Any:
             with Progress(
                 SpinnerColumn(spinner_name="line" if _is_windows else "dots"),
                 TextColumn("[progress.description]{task.description}"),
@@ -743,15 +778,19 @@ def build_from_plan(
     if "config" in plan_data:
         if "llm_default" in plan_data["config"]:
             from loom.config.models import LLMConfig
+
             config.llm_default = LLMConfig(**plan_data["config"]["llm_default"])
 
     # Reconstruct state
     prd = PRD(**plan_data["prd"]) if plan_data.get("prd") else None
-    architecture = ArchitectureDoc(**plan_data["architecture"]) if plan_data.get("architecture") else None
+    architecture = (
+        ArchitectureDoc(**plan_data["architecture"]) if plan_data.get("architecture") else None
+    )
 
     memory_context = None
     if plan_data.get("memory_context"):
         from loom.memory.models import MemoryContext
+
         memory_context = MemoryContext(**plan_data["memory_context"])
 
     initial_state = {
@@ -768,7 +807,7 @@ def build_from_plan(
         "code_files": {},
     }
 
-    async def run_build():
+    async def run_build() -> Any:
         from loom.graph.builder import compile_graph
         from loom.graph.checkpoint import create_memory_checkpointer, get_checkpoint_config
 
@@ -839,7 +878,10 @@ def memory_status() -> None:
     table.add_column("Value", style="green")
 
     table.add_row("Enabled", "[green]Yes[/green]" if memory_config.enabled else "[red]No[/red]")
-    table.add_row("Dependencies", "[green]Available[/green]" if is_memory_available() else "[yellow]Not installed[/yellow]")
+    table.add_row(
+        "Dependencies",
+        "[green]Available[/green]" if is_memory_available() else "[yellow]Not installed[/yellow]",
+    )
     table.add_row("Embedder", memory_config.embedder)
     table.add_row("Model", memory_config.embedder_model)
     table.add_row("Database Path", memory_config.db_path)
@@ -857,7 +899,9 @@ def memory_status() -> None:
         except Exception as e:
             console.print(f"\n[yellow]Could not get record count:[/yellow] {e}")
     elif not is_memory_available():
-        console.print("\n[yellow]Tip:[/yellow] Install memory dependencies with: pip install 'loom[memory]'")
+        console.print(
+            "\n[yellow]Tip:[/yellow] Install memory dependencies with: pip install 'loom[memory]'"
+        )
 
 
 @memory_app.command("list")
@@ -1120,9 +1164,7 @@ def history_show(
             console.print(f"[dim]{ts}[/dim] [cyan]You[/cyan] ▸ {ev.get('content', '')}")
         elif role == "assistant":
             agent = ev.get("agent", "agent")
-            console.print(
-                f"[dim]{ts}[/dim] [magenta]{agent}[/magenta] ▸ {ev.get('content', '')}"
-            )
+            console.print(f"[dim]{ts}[/dim] [magenta]{agent}[/magenta] ▸ {ev.get('content', '')}")
         elif role == "system":
             cmd = ev.get("command", "")
             args = " ".join(ev.get("args", []))

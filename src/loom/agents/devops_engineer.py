@@ -4,9 +4,9 @@ Produces Docker, CI/CD, and deployment configurations.
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
+from loom._time import now_utc
 from loom.agents.base import build_agent_chain
 from loom.agents.product_manager import TokenTracker
 from loom.agents.prompts.devops_engineer import (
@@ -39,14 +39,14 @@ def _create_events(devops: DevOpsBundle) -> list[Event]:
     """Create events for successful DevOps config generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.DEVOPS,
             phase=Phase.DEPLOYMENT,
             payload={"message": "Starting DevOps configuration"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_END,
             agent=AgentRole.DEVOPS,
             phase=Phase.DEPLOYMENT,
@@ -63,14 +63,14 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     """Create events for failed DevOps config generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.DEVOPS,
             phase=Phase.DEPLOYMENT,
             payload={"message": "Starting DevOps configuration"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.ERROR,
             agent=AgentRole.DEVOPS,
             phase=Phase.DEPLOYMENT,
@@ -82,9 +82,7 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     ]
 
 
-def _create_cost_entry(
-    tracker: TokenTracker, provider: str, model: str
-) -> CostEntry | None:
+def _create_cost_entry(tracker: TokenTracker, provider: str, model: str) -> CostEntry | None:
     """Create a cost entry from token tracking data."""
     if tracker.input_tokens == 0 and tracker.output_tokens == 0:
         return None
@@ -121,7 +119,7 @@ async def devops_engineer_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     agent=AgentRole.DEVOPS,
                     phase=Phase.DEPLOYMENT,
@@ -134,6 +132,7 @@ async def devops_engineer_node(
     # Get or create config
     if config is None:
         from loom.config import load_config
+
         config = load_config()
 
     # Get LLM configuration
@@ -197,9 +196,7 @@ async def devops_engineer_node(
 
         except Exception as e:
             last_error = e
-            logger.warning(
-                f"DevOps config attempt {attempt}/{MAX_PARSE_RETRIES} failed: {e}"
-            )
+            logger.warning(f"DevOps config attempt {attempt}/{MAX_PARSE_RETRIES} failed: {e}")
 
             if attempt < MAX_PARSE_RETRIES:
                 raw_output = str(e)
@@ -208,7 +205,9 @@ async def devops_engineer_node(
                 feedback = "\n\n" + create_parse_error_feedback(raw_output, str(e))
 
     # All retries exhausted
-    error_message = f"Failed to generate DevOps config after {MAX_PARSE_RETRIES} attempts: {last_error}"
+    error_message = (
+        f"Failed to generate DevOps config after {MAX_PARSE_RETRIES} attempts: {last_error}"
+    )
     logger.error(error_message)
 
     events = _create_error_events(str(last_error), MAX_PARSE_RETRIES)

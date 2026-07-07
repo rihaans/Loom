@@ -11,16 +11,19 @@ from loom.state.enums import Phase
 logger = logging.getLogger(__name__)
 
 
-def route_after_supervisor(
-    state: dict[str, Any],
-) -> Literal[
+RouteAfterSupervisor = Literal[
     "product_manager",
     "architect",
     "developers",
     "qa_engineer",
     "devops_engineer",
     "__end__",
-]:
+]
+
+
+def route_after_supervisor(
+    state: dict[str, Any],
+) -> RouteAfterSupervisor:
     """Route to the appropriate agent after the supervisor determines the phase.
 
     Args:
@@ -31,7 +34,7 @@ def route_after_supervisor(
     """
     phase = state.get("phase", Phase.INIT)
 
-    routing_map = {
+    routing_map: dict[Phase, RouteAfterSupervisor] = {
         Phase.INIT: "product_manager",
         Phase.REQUIREMENTS: "product_manager",
         Phase.DESIGN: "architect",
@@ -41,7 +44,7 @@ def route_after_supervisor(
         Phase.DONE: "__end__",
     }
 
-    next_node = routing_map.get(phase, "__end__")
+    next_node: RouteAfterSupervisor = routing_map.get(phase, "__end__")
     logger.debug(f"Routing phase {phase} -> {next_node}")
     return next_node
 

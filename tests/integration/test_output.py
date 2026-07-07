@@ -6,16 +6,14 @@ Tests that the output writer correctly generates all files including ADRs.
 from pathlib import Path
 from unittest.mock import Mock
 
-import pytest
-
 from loom.adr.generator import generate_adrs
 from loom.output.writer import materialize_state, write_adrs
 from loom.state.enums import TechLayer
 from loom.state.models import (
+    PRD,
     CodeFile,
     DevOpsBundle,
     FileBundle,
-    PRD,
 )
 
 
@@ -75,9 +73,16 @@ class TestOutputWriter:
             "prd": prd,
             "architecture": arch,
             "code_files": {
-                "backend": FileBundle(files=[
-                    CodeFile(path="src/main.py", content="# Main file\nprint('Hello')", language="python"),
-                ], entry_point="src/main.py"),
+                "backend": FileBundle(
+                    files=[
+                        CodeFile(
+                            path="src/main.py",
+                            content="# Main file\nprint('Hello')",
+                            language="python",
+                        ),
+                    ],
+                    entry_point="src/main.py",
+                ),
             },
             "devops_files": DevOpsBundle(
                 dockerfile="FROM python:3.12",
@@ -104,13 +109,27 @@ class TestOutputWriter:
             "prd": prd,
             "architecture": None,
             "code_files": {
-                "backend": FileBundle(files=[
-                    CodeFile(path="src/main.py", content="print('hello')", language="python"),
-                    CodeFile(path="src/utils/helper.py", content="def help(): pass", language="python"),
-                ], entry_point="src/main.py"),
-                "tests": FileBundle(files=[
-                    CodeFile(path="tests/test_main.py", content="def test_main(): pass", language="python"),
-                ], entry_point="tests/test_main.py"),
+                "backend": FileBundle(
+                    files=[
+                        CodeFile(path="src/main.py", content="print('hello')", language="python"),
+                        CodeFile(
+                            path="src/utils/helper.py",
+                            content="def help(): pass",
+                            language="python",
+                        ),
+                    ],
+                    entry_point="src/main.py",
+                ),
+                "tests": FileBundle(
+                    files=[
+                        CodeFile(
+                            path="tests/test_main.py",
+                            content="def test_main(): pass",
+                            language="python",
+                        ),
+                    ],
+                    entry_point="tests/test_main.py",
+                ),
             },
             "devops_files": None,
         }
@@ -186,9 +205,12 @@ class TestADRGeneration:
             "prd": prd,
             "architecture": arch,
             "code_files": {
-                "backend": FileBundle(files=[
-                    CodeFile(path="src/main.py", content="# Code", language="python"),
-                ], entry_point="src/main.py"),
+                "backend": FileBundle(
+                    files=[
+                        CodeFile(path="src/main.py", content="# Code", language="python"),
+                    ],
+                    entry_point="src/main.py",
+                ),
             },
             "devops_files": DevOpsBundle(
                 dockerfile_backend="FROM python",
@@ -291,9 +313,12 @@ class TestOutputSafety:
             "prd": prd,
             "architecture": None,
             "code_files": {
-                "backend": FileBundle(files=[
-                    CodeFile(path="src/safe.py", content="# Safe file", language="python"),
-                ], entry_point="src/safe.py"),
+                "backend": FileBundle(
+                    files=[
+                        CodeFile(path="src/safe.py", content="# Safe file", language="python"),
+                    ],
+                    entry_point="src/safe.py",
+                ),
             },
             "devops_files": None,
         }
@@ -315,9 +340,16 @@ class TestOutputSafety:
             "prd": prd,
             "architecture": None,
             "code_files": {
-                "backend": FileBundle(files=[
-                    CodeFile(path="src/deep/nested/path/file.py", content="# Deep file", language="python"),
-                ], entry_point="src/deep/nested/path/file.py"),
+                "backend": FileBundle(
+                    files=[
+                        CodeFile(
+                            path="src/deep/nested/path/file.py",
+                            content="# Deep file",
+                            language="python",
+                        ),
+                    ],
+                    entry_point="src/deep/nested/path/file.py",
+                ),
             },
             "devops_files": None,
         }

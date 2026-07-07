@@ -8,7 +8,6 @@ Supports two modes controlled by state.interactive:
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -19,6 +18,7 @@ from langchain_core.messages import (
     SystemMessage,
 )
 
+from loom._time import now_utc
 from loom.agents.base import build_agent_chain
 from loom.agents.product_manager import TokenTracker
 from loom.agents.prompts.architect import (
@@ -31,7 +31,7 @@ from loom.agents.prompts.architect import (
 from loom.config import LoomConfig
 from loom.llm import calculate_cost, create_parse_error_feedback, get_llm_for_role
 from loom.state.enums import AgentRole, EventType, Phase
-from loom.state.models import ArchitectureDoc, CostEntry, Event
+from loom.state.models import PRD, ArchitectureDoc, CostEntry, Event
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,14 @@ def _create_events(architecture: ArchitectureDoc) -> list[Event]:
     """Create events for a successful architecture generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.ARCHITECT,
             phase=Phase.DESIGN,
             payload={"message": "Starting architecture design"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_END,
             agent=AgentRole.ARCHITECT,
             phase=Phase.DESIGN,
@@ -67,14 +67,14 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     """Create events for a failed architecture generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.ARCHITECT,
             phase=Phase.DESIGN,
             payload={"message": "Starting architecture design"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.ERROR,
             agent=AgentRole.ARCHITECT,
             phase=Phase.DESIGN,
@@ -86,9 +86,7 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     ]
 
 
-def _create_cost_entry(
-    tracker: TokenTracker, provider: str, model: str
-) -> CostEntry | None:
+def _create_cost_entry(tracker: TokenTracker, provider: str, model: str) -> CostEntry | None:
     """Create a cost entry from token tracking data."""
     if tracker.input_tokens == 0 and tracker.output_tokens == 0:
         return None
@@ -109,12 +107,13 @@ def _create_cost_entry(
 # Legacy one-shot path (interactive=False)
 # =============================================================================
 
+
 async def _legacy_one_shot_architect(
     state: dict[str, Any],
     config: LoomConfig,
 ) -> dict[str, Any]:
     """Original one-shot Architect logic — preserved byte-identical from Phase 4."""
-    prd = state.get("prd")
+    prd: PRD = state["prd"]  # guaranteed set by architect_node before this path
     description = state.get("description", "")
     memory_context = state.get("memory_context")
     architecture_feedback = state.get("architecture_feedback")
@@ -222,6 +221,7 @@ Produce a revised ArchitectureDoc that addresses the feedback while keeping unch
 # Conversational path helpers (interactive=True)
 # =============================================================================
 
+
 async def _architect_propose_turn(
     prd_json: str,
     history: list[BaseMessage],
@@ -248,7 +248,7 @@ async def _architect_propose_turn(
         messages = [SystemMessage(content=ARCHITECT_REVISE_PROMPT), *history]
 
     response = await llm.ainvoke(messages)
-    return response.content
+    return str(response.content)
 
 
 async def _architect_draft_doc(
@@ -270,9 +270,7 @@ async def _architect_draft_doc(
     parser = PydanticOutputParser(pydantic_object=ArchitectureDoc)
     format_instructions = parser.get_format_instructions()
 
-    system_text = ARCHITECT_DRAFT_PROMPT.replace(
-        "{format_instructions}", format_instructions
-    )
+    system_text = ARCHITECT_DRAFT_PROMPT.replace("{format_instructions}", format_instructions)
 
     messages: list[BaseMessage] = [
         SystemMessage(content=system_text),
@@ -285,13 +283,11 @@ async def _architect_draft_doc(
     for attempt in range(1, MAX_PARSE_RETRIES + 1):
         try:
             response = await llm.ainvoke(messages)
-            arch = parser.parse(response.content)
+            arch = parser.parse(str(response.content))
             return arch
         except Exception as e:
             last_error = e
-            logger.warning(
-                f"Architect draft attempt {attempt}/{MAX_PARSE_RETRIES} failed: {e}"
-            )
+            logger.warning(f"Architect draft attempt {attempt}/{MAX_PARSE_RETRIES} failed: {e}")
 
     raise RuntimeError(
         f"Architect drafting failed after {MAX_PARSE_RETRIES} attempts: {last_error}"
@@ -318,13 +314,15 @@ async def _interactive_architect(
             "agent_status": "wait_for_input",
             "pending_user_input": None,
             "error": "No PRD available for architecture design",
-            "events": [Event(
-                timestamp=datetime.utcnow(),
-                type=EventType.ERROR,
-                agent=AgentRole.ARCHITECT,
-                phase=Phase.DESIGN,
-                payload={"error": "No PRD provided"},
-            )],
+            "events": [
+                Event(
+                    timestamp=now_utc(),
+                    type=EventType.ERROR,
+                    agent=AgentRole.ARCHITECT,
+                    phase=Phase.DESIGN,
+                    payload={"error": "No PRD provided"},
+                )
+            ],
         }
 
     prd_json = prd.model_dump_json(indent=2)
@@ -345,29 +343,33 @@ async def _interactive_architect(
                 "agent_status": "done",
                 "pending_user_input": None,
                 "phase": Phase.DEVELOPMENT,
-                "events": [Event(
-                    timestamp=datetime.utcnow(),
-                    type=EventType.AGENT_END,
-                    agent=AgentRole.ARCHITECT,
-                    phase=Phase.DESIGN,
-                    payload={
-                        "stack_count": len(arch.stack),
-                        "endpoint_count": len(arch.api_endpoints),
-                    },
-                )],
+                "events": [
+                    Event(
+                        timestamp=now_utc(),
+                        type=EventType.AGENT_END,
+                        agent=AgentRole.ARCHITECT,
+                        phase=Phase.DESIGN,
+                        payload={
+                            "stack_count": len(arch.stack),
+                            "endpoint_count": len(arch.api_endpoints),
+                        },
+                    )
+                ],
             }
         except Exception as e:
             return {
                 "agent_status": "wait_for_input",
                 "pending_user_input": None,
                 "error": f"Architect drafting failed: {e}",
-                "events": [Event(
-                    timestamp=datetime.utcnow(),
-                    type=EventType.ERROR,
-                    agent=AgentRole.ARCHITECT,
-                    phase=Phase.DESIGN,
-                    payload={"error": str(e)},
-                )],
+                "events": [
+                    Event(
+                        timestamp=now_utc(),
+                        type=EventType.ERROR,
+                        agent=AgentRole.ARCHITECT,
+                        phase=Phase.DESIGN,
+                        payload={"error": str(e)},
+                    )
+                ],
             }
 
     # --- Revision cap: force ready_to_draft after MAX_ARCHITECT_REVISIONS ---
@@ -381,16 +383,18 @@ async def _interactive_architect(
         return {
             "agent_status": "ready_to_draft",
             "pending_user_input": None,
-            "events": [Event(
-                timestamp=datetime.utcnow(),
-                type=EventType.AGENT_TURN_LIMIT,
-                agent=AgentRole.ARCHITECT,
-                phase=Phase.DESIGN,
-                payload={
-                    "reason": "max_revisions_reached",
-                    "revisions": MAX_ARCHITECT_REVISIONS,
-                },
-            )],
+            "events": [
+                Event(
+                    timestamp=now_utc(),
+                    type=EventType.AGENT_TURN_LIMIT,
+                    agent=AgentRole.ARCHITECT,
+                    phase=Phase.DESIGN,
+                    payload={
+                        "reason": "max_revisions_reached",
+                        "revisions": MAX_ARCHITECT_REVISIONS,
+                    },
+                )
+            ],
         }
 
     # --- Build the new messages for this turn ---
@@ -399,9 +403,7 @@ async def _interactive_architect(
         new_messages.append(HumanMessage(content=user_input))
     elif not history:
         # Bootstrap: trigger the initial proposal
-        new_messages.append(
-            HumanMessage(content="Please propose a stack for this project.")
-        )
+        new_messages.append(HumanMessage(content="Please propose a stack for this project."))
 
     full_context = history + new_messages
 
@@ -423,28 +425,29 @@ async def _interactive_architect(
     # types "yes" / "/skip" / "/done" to advance, which becomes __DRAFT__.
     new_messages.append(AIMessage(content=response_text.strip()))
 
-    logger.info(
-        f"Architect proposal turn complete (added {len(new_messages)} msgs)"
-    )
+    logger.info(f"Architect proposal turn complete (added {len(new_messages)} msgs)")
 
     # Return ONLY the new messages — reducer appends them to existing history
     return {
         "agent_messages": {role_key: new_messages},
         "agent_status": "wait_for_input",
         "pending_user_input": None,
-        "events": [Event(
-            timestamp=datetime.utcnow(),
-            type=EventType.AGENT_TURN,
-            agent=AgentRole.ARCHITECT,
-            phase=Phase.DESIGN,
-            payload={"history_length": len(history) + len(new_messages)},
-        )],
+        "events": [
+            Event(
+                timestamp=now_utc(),
+                type=EventType.AGENT_TURN,
+                agent=AgentRole.ARCHITECT,
+                phase=Phase.DESIGN,
+                payload={"history_length": len(history) + len(new_messages)},
+            )
+        ],
     }
 
 
 # =============================================================================
 # Public node entry point
 # =============================================================================
+
 
 async def architect_node(
     state: dict[str, Any],
@@ -470,7 +473,7 @@ async def architect_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     agent=AgentRole.ARCHITECT,
                     phase=Phase.DESIGN,
@@ -482,6 +485,7 @@ async def architect_node(
 
     if config is None:
         from loom.config import load_config
+
         config = load_config()
 
     if state.get("interactive"):

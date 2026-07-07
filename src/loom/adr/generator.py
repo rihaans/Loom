@@ -86,9 +86,7 @@ def slugify(text: str) -> str:
     return slug.strip("-")
 
 
-def filter_significant_decisions(
-    stack: list[Any], significance: str = "significant"
-) -> list[Any]:
+def filter_significant_decisions(stack: list[Any], significance: str = "significant") -> list[Any]:
     """Filter tech choices to those warranting ADRs.
 
     Args:
@@ -103,7 +101,12 @@ def filter_significant_decisions(
 
     if significance == "critical":
         # Only the most impactful: backend, frontend, database, auth
-        critical_layers = {TechLayer.BACKEND, TechLayer.FRONTEND, TechLayer.DATABASE, TechLayer.AUTH}
+        critical_layers = {
+            TechLayer.BACKEND,
+            TechLayer.FRONTEND,
+            TechLayer.DATABASE,
+            TechLayer.AUTH,
+        }
         return [choice for choice in stack if choice.layer in critical_layers]
 
     # Default: "significant" - filter out cosmetic choices

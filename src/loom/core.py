@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from loom._time import now_utc
 from loom.config import BuildResult, LoomConfig, load_config
 from loom.graph.builder import compile_graph
 from loom.graph.checkpoint import (
@@ -65,7 +66,7 @@ async def build(
         >>> print(f"Project created at: {result.output_dir}")
         >>> print(f"Total cost: ${result.total_cost_usd:.2f}")
     """
-    start_time = datetime.utcnow()
+    start_time = now_utc()
     logger.info(f"Starting build: {description[:50]}...")
 
     # Load config if not provided
@@ -189,12 +190,12 @@ def _calculate_tokens(state: dict[str, Any]) -> int:
 def _calculate_cost(state: dict[str, Any]) -> float:
     """Calculate total cost from state costs."""
     costs = state.get("costs", [])
-    return sum(c.cost_usd for c in costs)
+    return float(sum(c.cost_usd for c in costs))
 
 
 def _duration_seconds(start_time: datetime) -> float:
     """Calculate duration in seconds from start time."""
-    delta = datetime.utcnow() - start_time
+    delta = now_utc() - start_time
     return delta.total_seconds()
 
 
@@ -218,7 +219,7 @@ async def resume_build(
     Returns:
         BuildResult containing success status, output path, costs, etc.
     """
-    start_time = datetime.utcnow()
+    start_time = now_utc()
     logger.info(f"Resuming build: {thread_id}")
 
     # Load config if not provided

@@ -102,8 +102,9 @@ class LanceDBStore(MemoryStore):
             db_path: Path to the LanceDB directory.
         """
         self.db_path = Path(db_path)
-        self._db = None
-        self._table = None
+        # External LanceDB handles, connected lazily; typed Any since the lib is untyped.
+        self._db: Any = None
+        self._table: Any = None
 
     def _ensure_db(self) -> None:
         """Lazy-load the database connection."""
@@ -128,24 +129,26 @@ class LanceDBStore(MemoryStore):
             # Create table with schema
             import pyarrow as pa
 
-            schema = pa.schema([
-                pa.field("run_id", pa.string()),
-                pa.field("timestamp", pa.string()),
-                pa.field("descriptor", pa.string()),
-                pa.field("project_type", pa.string()),
-                pa.field("stack_summary", pa.string()),
-                pa.field("test_passed", pa.bool_()),
-                pa.field("retry_count", pa.int64()),
-                pa.field("file_count", pa.int64()),
-                pa.field("total_cost_usd", pa.float64()),
-                pa.field("one_liner", pa.string()),
-                pa.field("must_have_features", pa.string()),  # JSON encoded
-                pa.field("data_entity_names", pa.string()),  # JSON encoded
-                pa.field("chosen_stack", pa.string()),  # JSON encoded
-                pa.field("api_endpoint_summary", pa.string()),  # JSON encoded
-                pa.field("folder_structure_keys", pa.string()),  # JSON encoded
-                pa.field("vector", pa.list_(pa.float32(), EMBEDDING_DIM)),
-            ])
+            schema = pa.schema(
+                [
+                    pa.field("run_id", pa.string()),
+                    pa.field("timestamp", pa.string()),
+                    pa.field("descriptor", pa.string()),
+                    pa.field("project_type", pa.string()),
+                    pa.field("stack_summary", pa.string()),
+                    pa.field("test_passed", pa.bool_()),
+                    pa.field("retry_count", pa.int64()),
+                    pa.field("file_count", pa.int64()),
+                    pa.field("total_cost_usd", pa.float64()),
+                    pa.field("one_liner", pa.string()),
+                    pa.field("must_have_features", pa.string()),  # JSON encoded
+                    pa.field("data_entity_names", pa.string()),  # JSON encoded
+                    pa.field("chosen_stack", pa.string()),  # JSON encoded
+                    pa.field("api_endpoint_summary", pa.string()),  # JSON encoded
+                    pa.field("folder_structure_keys", pa.string()),  # JSON encoded
+                    pa.field("vector", pa.list_(pa.float32(), EMBEDDING_DIM)),
+                ]
+            )
             self._db.create_table(self.TABLE_NAME, schema=schema)
             logger.info(f"Created table {self.TABLE_NAME}")
 
@@ -287,7 +290,8 @@ class LanceDBStore(MemoryStore):
             Number of records.
         """
         self._ensure_table()
-        return self._table.count_rows()
+        count: int = self._table.count_rows()
+        return count
 
     def clear(self) -> None:
         """Delete all records from the store."""
@@ -376,7 +380,7 @@ class LanceDBStore(MemoryStore):
 
         df = self._table.to_pandas()
         df = df.sort_values("timestamp", ascending=False)
-        df = df.iloc[offset:offset + limit]
+        df = df.iloc[offset : offset + limit]
 
         return [self._row_to_record(row) for row in df.to_dict("records")]
 
@@ -384,7 +388,7 @@ class LanceDBStore(MemoryStore):
 class InMemoryStore(MemoryStore):
     """In-memory store for testing purposes."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the in-memory store."""
         self._records: dict[str, tuple[MemoryRecord, list[float]]] = {}
 

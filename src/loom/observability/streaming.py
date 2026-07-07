@@ -10,6 +10,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
+from loom._time import now_utc
 from loom.state.enums import AgentRole, Phase
 
 logger = logging.getLogger(__name__)
@@ -58,10 +61,11 @@ NODE_TO_AGENT: dict[str, AgentRole] = {
     "architect": AgentRole.ARCHITECT,
     "frontend_dev": AgentRole.FRONTEND_DEV,
     "backend_dev": AgentRole.BACKEND_DEV,
+    "code_reviewer": AgentRole.CODE_REVIEWER,
     "qa_engineer": AgentRole.QA,
     "devops_engineer": AgentRole.DEVOPS,
-    "supervisor": AgentRole.PROJECT_MANAGER,
-    "dev_merge": AgentRole.PROJECT_MANAGER,
+    "supervisor": AgentRole.SUPERVISOR,
+    "dev_merge": AgentRole.SUPERVISOR,
 }
 
 
@@ -75,7 +79,7 @@ def _parse_langgraph_event(event: dict[str, Any]) -> StreamEvent | None:
         StreamEvent or None if event should be skipped.
     """
     event_type = event.get("event", "")
-    timestamp = datetime.utcnow()
+    timestamp = now_utc()
 
     # Graph start/end
     if event_type == "on_chain_start":
@@ -168,7 +172,7 @@ def _parse_langgraph_event(event: dict[str, Any]) -> StreamEvent | None:
 async def stream_build_events(
     graph: Any,
     initial_state: dict[str, Any],
-    config: dict[str, Any] | None = None,
+    config: RunnableConfig | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """Stream events from a build execution.
 
@@ -192,7 +196,7 @@ async def stream_build_events(
     except Exception as e:
         yield StreamEvent(
             type=StreamEventType.ERROR,
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             error=str(e),
         )
 
@@ -200,7 +204,7 @@ async def stream_build_events(
 class BuildObserver:
     """Observer for build events with callback support."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.callbacks: dict[StreamEventType, list[Callable[[StreamEvent], None]]] = {}
         self._current_node: str | None = None
         self._current_agent: AgentRole | None = None
@@ -271,7 +275,7 @@ class BuildObserver:
         self,
         graph: Any,
         initial_state: dict[str, Any],
-        config: dict[str, Any] | None = None,
+        config: RunnableConfig | None = None,
     ) -> dict[str, Any]:
         """Observe a build execution.
 

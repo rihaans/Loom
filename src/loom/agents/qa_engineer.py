@@ -5,9 +5,9 @@ Falls back to stub mode if sandbox is unavailable.
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
+from loom._time import now_utc
 from loom.config import LoomConfig
 from loom.sandbox import (
     ExecutionStatus,
@@ -92,16 +92,13 @@ def _detect_test_framework(files: dict[str, str]) -> tuple[str, str]:
     """
     # Check for Python tests
     has_pytest = any("pytest" in content for content in files.values())
-    has_python_tests = any(
-        path.startswith("tests/") and path.endswith(".py") for path in files
-    )
+    has_python_tests = any(path.startswith("tests/") and path.endswith(".py") for path in files)
 
     # Check for JS/TS tests
     has_jest = any("jest" in content.lower() for content in files.values())
     has_vitest = any("vitest" in content.lower() for content in files.values())
     has_js_tests = any(
-        path.endswith((".test.js", ".test.ts", ".spec.js", ".spec.ts"))
-        for path in files
+        path.endswith((".test.js", ".test.ts", ".spec.js", ".spec.ts")) for path in files
     )
 
     # Prefer Python pytest
@@ -164,11 +161,14 @@ def _create_qa_feedback(test_report: TestReport, files: dict[str, str]) -> QAFee
     summary = f"{test_report.failed} of {test_report.total} tests failed.\n\nFailed tests:\n"
     summary += "\n".join(error_messages)
 
+    suspected_files = sorted({tc.file for tc in failed_cases if tc.file})
+
     return QAFeedback(
-        summary=summary,
         target_agent=target,
-        failed_tests=[tc.name for tc in failed_cases],
-        suggestions=["Fix the failing tests based on the error messages above"],
+        failed_tests=failed_cases,
+        suspected_files=suspected_files,
+        suggested_fixes=["Fix the failing tests based on the error messages above"],
+        raw_error_excerpt=summary[:4000],
     )
 
 
@@ -197,7 +197,7 @@ async def qa_engineer_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     agent=AgentRole.QA,
                     phase=Phase.TESTING,
@@ -209,7 +209,7 @@ async def qa_engineer_node(
 
     events = [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.QA,
             phase=Phase.TESTING,
@@ -226,7 +226,7 @@ async def qa_engineer_node(
         test_report = _create_stub_test_report(prd)
         events.append(
             Event(
-                timestamp=datetime.utcnow(),
+                timestamp=now_utc(),
                 type=EventType.AGENT_END,
                 agent=AgentRole.QA,
                 phase=Phase.TESTING,
@@ -283,7 +283,9 @@ async def qa_engineer_node(
                 cases=[
                     TestCase(
                         name="test_execution",
+                        file="tests/",
                         passed=False,
+                        duration_ms=result.duration_seconds * 1000,
                         error_message=f"Test execution timed out after {result.duration_seconds}s",
                     )
                 ],
@@ -299,7 +301,9 @@ async def qa_engineer_node(
                 cases=[
                     TestCase(
                         name="test_execution",
+                        file="tests/",
                         passed=False,
+                        duration_ms=result.duration_seconds * 1000,
                         error_message=result.error or "Unknown error",
                     )
                 ],
@@ -317,7 +321,7 @@ async def qa_engineer_node(
 
         events.append(
             Event(
-                timestamp=datetime.utcnow(),
+                timestamp=now_utc(),
                 type=EventType.AGENT_END,
                 agent=AgentRole.QA,
                 phase=Phase.TESTING,
@@ -349,7 +353,7 @@ async def qa_engineer_node(
         logger.exception(f"QA execution failed: {e}")
         events.append(
             Event(
-                timestamp=datetime.utcnow(),
+                timestamp=now_utc(),
                 type=EventType.ERROR,
                 agent=AgentRole.QA,
                 phase=Phase.TESTING,

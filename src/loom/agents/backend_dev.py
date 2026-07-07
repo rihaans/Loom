@@ -4,10 +4,10 @@ Produces backend code files based on PRD and architecture.
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
-from loom.agents.base import build_agent_chain
+from loom._time import now_utc
+from loom.agents.base import build_agent_chain, build_revision_feedback
 from loom.agents.product_manager import TokenTracker
 from loom.agents.prompts.backend_dev import (
     BACKEND_DEV_HUMAN_TEMPLATE,
@@ -27,14 +27,14 @@ def _create_events(bundle: FileBundle) -> list[Event]:
     """Create events for successful backend code generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.BACKEND_DEV,
             phase=Phase.DEVELOPMENT,
             payload={"message": "Starting backend development"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_END,
             agent=AgentRole.BACKEND_DEV,
             phase=Phase.DEVELOPMENT,
@@ -50,14 +50,14 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     """Create events for failed backend code generation."""
     return [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.AGENT_START,
             agent=AgentRole.BACKEND_DEV,
             phase=Phase.DEVELOPMENT,
             payload={"message": "Starting backend development"},
         ),
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.ERROR,
             agent=AgentRole.BACKEND_DEV,
             phase=Phase.DEVELOPMENT,
@@ -69,9 +69,7 @@ def _create_error_events(error_message: str, attempts: int) -> list[Event]:
     ]
 
 
-def _create_cost_entry(
-    tracker: TokenTracker, provider: str, model: str
-) -> CostEntry | None:
+def _create_cost_entry(tracker: TokenTracker, provider: str, model: str) -> CostEntry | None:
     """Create a cost entry from token tracking data."""
     if tracker.input_tokens == 0 and tracker.output_tokens == 0:
         return None
@@ -104,12 +102,13 @@ async def backend_dev_node(
     prd = state.get("prd")
     architecture = state.get("architecture")
     qa_feedback = state.get("qa_feedback")
+    review_report = state.get("review_report")
 
     if prd is None:
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     agent=AgentRole.BACKEND_DEV,
                     phase=Phase.DEVELOPMENT,
@@ -123,7 +122,7 @@ async def backend_dev_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     agent=AgentRole.BACKEND_DEV,
                     phase=Phase.DEVELOPMENT,
@@ -136,6 +135,7 @@ async def backend_dev_node(
     # Get or create config
     if config is None:
         from loom.config import load_config
+
         config = load_config()
 
     # Get LLM configuration
@@ -164,18 +164,8 @@ async def backend_dev_node(
     prd_json = prd.model_dump_json(indent=2)
     architecture_json = architecture.model_dump_json(indent=2)
 
-    # Build QA feedback section
-    qa_feedback_section = ""
-    if qa_feedback:
-        qa_feedback_section = f"""
-QA Feedback (REVISION MODE):
-Failed tests: {[t.name for t in qa_feedback.failed_tests]}
-Suspected files: {qa_feedback.suspected_files}
-Suggested fixes: {qa_feedback.suggested_fixes}
-Error excerpt: {qa_feedback.raw_error_excerpt[:500]}
-
-Make SURGICAL fixes only to address these specific issues.
-"""
+    # Build the revision-feedback section (QA failures and/or code-review issues).
+    qa_feedback_section = build_revision_feedback(qa_feedback, review_report)
 
     # Retry loop
     last_error: Exception | None = None
@@ -210,9 +200,7 @@ Make SURGICAL fixes only to address these specific issues.
 
         except Exception as e:
             last_error = e
-            logger.warning(
-                f"Backend dev attempt {attempt}/{MAX_PARSE_RETRIES} failed: {e}"
-            )
+            logger.warning(f"Backend dev attempt {attempt}/{MAX_PARSE_RETRIES} failed: {e}")
 
             if attempt < MAX_PARSE_RETRIES:
                 raw_output = str(e)
@@ -221,7 +209,9 @@ Make SURGICAL fixes only to address these specific issues.
                 feedback = "\n\n" + create_parse_error_feedback(raw_output, str(e))
 
     # All retries exhausted
-    error_message = f"Failed to generate backend code after {MAX_PARSE_RETRIES} attempts: {last_error}"
+    error_message = (
+        f"Failed to generate backend code after {MAX_PARSE_RETRIES} attempts: {last_error}"
+    )
     logger.error(error_message)
 
     events = _create_error_events(str(last_error), MAX_PARSE_RETRIES)

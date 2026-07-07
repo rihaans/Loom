@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from loom.config import (
-    LoomConfig,
     LLMConfig,
+    LoomConfig,
     auto_detect_default,
     load_config,
     parse_llm_string,

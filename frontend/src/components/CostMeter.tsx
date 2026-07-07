@@ -13,29 +13,30 @@ export default function CostMeter({ runId }: CostMeterProps) {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await buildApi.get(runId)
-        // Stats would come from the run status or a separate endpoint
-        // For now, we'll update from the artifact if available
-      } catch (err) {
-        // Ignore errors
+        const { data } = await buildApi.get(runId)
+        const t = (data as { total_tokens?: number }).total_tokens
+        const c = (data as { total_cost?: number }).total_cost
+        if (typeof t === 'number') setTokens(t)
+        if (typeof c === 'number') setCost(c)
+      } catch {
+        /* ignore polling errors */
       }
     }
-
-    const interval = setInterval(fetchStats, 5000)
     fetchStats()
-
+    const interval = setInterval(fetchStats, 4000)
     return () => clearInterval(interval)
   }, [runId])
 
   return (
-    <div className="flex items-center gap-6 text-sm">
-      <div className="flex items-center gap-2 text-gray-400">
-        <Hash className="w-4 h-4" />
-        <span>{tokens.toLocaleString()} tokens</span>
+    <div className="flex items-center gap-2">
+      <div className="glass flex items-center gap-2 px-3 py-1.5 text-sm">
+        <Hash className="h-3.5 w-3.5 text-loom-cyan" />
+        <span className="font-mono tabular-nums text-white">{tokens.toLocaleString()}</span>
+        <span className="text-slate-500">tokens</span>
       </div>
-      <div className="flex items-center gap-2 text-gray-400">
-        <Coins className="w-4 h-4" />
-        <span>${cost.toFixed(4)}</span>
+      <div className="glass flex items-center gap-2 px-3 py-1.5 text-sm">
+        <Coins className="h-3.5 w-3.5 text-loom-magenta" />
+        <span className="font-mono tabular-nums text-white">${cost.toFixed(4)}</span>
       </div>
     </div>
   )

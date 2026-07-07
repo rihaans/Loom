@@ -103,8 +103,12 @@ class TestCostEstimation:
 
         complex_state = {"prd": complex_prd, "architecture": complex_arch}
 
-        simple_low, simple_high = estimate_build_cost(simple_state, "anthropic", "claude-sonnet-4-20250514")
-        complex_low, complex_high = estimate_build_cost(complex_state, "anthropic", "claude-sonnet-4-20250514")
+        simple_low, simple_high = estimate_build_cost(
+            simple_state, "anthropic", "claude-sonnet-4-20250514"
+        )
+        complex_low, complex_high = estimate_build_cost(
+            complex_state, "anthropic", "claude-sonnet-4-20250514"
+        )
 
         # Complex project should have higher estimates
         assert complex_high >= simple_high

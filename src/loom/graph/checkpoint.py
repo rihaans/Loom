@@ -10,8 +10,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
+
+from loom._time import now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +105,9 @@ def create_memory_checkpointer() -> SqliteSaver:
 
 
 @asynccontextmanager
-async def get_async_checkpointer_context(db_path: Path | str | None = None) -> AsyncIterator[MemorySaver]:
+async def get_async_checkpointer_context(
+    db_path: Path | str | None = None,
+) -> AsyncIterator[MemorySaver]:
     """Get an async context manager for the checkpointer.
 
     Note: Currently uses MemorySaver for async compatibility. For true persistence
@@ -153,12 +158,11 @@ def generate_thread_id(description: str, timestamp: str | None = None) -> str:
     Returns:
         Unique thread ID string
     """
-    from datetime import datetime
 
     from loom.output.slugify import slugify
 
     if timestamp is None:
-        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        timestamp = now_utc().strftime("%Y%m%d-%H%M%S")
 
     # Create a slug from the first few words of the description
     desc_slug = slugify(description[:50])
@@ -166,7 +170,7 @@ def generate_thread_id(description: str, timestamp: str | None = None) -> str:
     return f"{desc_slug}-{timestamp}"
 
 
-def get_checkpoint_config(thread_id: str) -> dict[str, Any]:
+def get_checkpoint_config(thread_id: str) -> RunnableConfig:
     """Create the configuration dict for checkpointed execution.
 
     Args:
@@ -197,27 +201,25 @@ def list_checkpoints(checkpointer: SqliteSaver, thread_id: str) -> list[dict[str
 
     try:
         for checkpoint in checkpointer.list(config):
-            checkpoints.append({
-                "thread_id": thread_id,
-                "checkpoint_id": checkpoint.config.get("configurable", {}).get(
-                    "checkpoint_id"
-                ),
-                "parent_id": checkpoint.parent_config.get("configurable", {}).get(
-                    "checkpoint_id"
-                )
-                if checkpoint.parent_config
-                else None,
-                "metadata": checkpoint.metadata,
-            })
+            checkpoints.append(
+                {
+                    "thread_id": thread_id,
+                    "checkpoint_id": checkpoint.config.get("configurable", {}).get("checkpoint_id"),
+                    "parent_id": checkpoint.parent_config.get("configurable", {}).get(
+                        "checkpoint_id"
+                    )
+                    if checkpoint.parent_config
+                    else None,
+                    "metadata": checkpoint.metadata,
+                }
+            )
     except Exception as e:
         logger.warning(f"Failed to list checkpoints for {thread_id}: {e}")
 
     return checkpoints
 
 
-def get_latest_checkpoint(
-    checkpointer: SqliteSaver, thread_id: str
-) -> dict[str, Any] | None:
+def get_latest_checkpoint(checkpointer: SqliteSaver, thread_id: str) -> dict[str, Any] | None:
     """Get the most recent checkpoint for a thread.
 
     Args:

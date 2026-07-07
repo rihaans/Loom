@@ -5,9 +5,9 @@ into the state for few-shot guidance.
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
+from loom._time import now_utc
 from loom.config import LoomConfig
 from loom.memory.factory import get_embedder, get_memory_store, is_memory_available
 from loom.memory.models import MemoryConfig, MemoryContext, build_descriptor
@@ -17,16 +17,14 @@ from loom.state.models import Event
 logger = logging.getLogger(__name__)
 
 
-def _create_retrieve_event(
-    num_retrieved: int, top_similarity: float | None = None
-) -> Event:
+def _create_retrieve_event(num_retrieved: int, top_similarity: float | None = None) -> Event:
     """Create an event for memory retrieval."""
     payload: dict[str, Any] = {"num_retrieved": num_retrieved}
     if top_similarity is not None:
         payload["top_similarity"] = round(top_similarity, 3)
 
     return Event(
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         type=EventType.AGENT_END,
         phase=Phase.INIT,
         payload=payload,
@@ -59,6 +57,7 @@ async def memory_retrieve_node(
     # Get or create config
     if config is None:
         from loom.config import load_config
+
         config = load_config()
 
     memory_config: MemoryConfig = getattr(config, "memory", MemoryConfig())
@@ -88,7 +87,7 @@ async def memory_retrieve_node(
         query_embedding = embedder.embed(descriptor)
 
         # Search for similar builds
-        filters = {}
+        filters: dict[str, Any] = {}
         if hasattr(prd, "project_type") and prd.project_type:
             # Optionally filter by project type for better relevance
             pass  # Don't filter for now, let similarity handle it
@@ -101,9 +100,7 @@ async def memory_retrieve_node(
 
         # Filter by minimum similarity threshold
         filtered_results = [
-            (record, score)
-            for record, score in results
-            if score >= memory_config.min_similarity
+            (record, score) for record, score in results if score >= memory_config.min_similarity
         ]
 
         if not filtered_results:
@@ -123,8 +120,7 @@ async def memory_retrieve_node(
 
         top_score = scores[0] if scores else None
         logger.info(
-            f"Retrieved {len(examples)} similar past builds "
-            f"(top similarity: {top_score:.3f})"
+            f"Retrieved {len(examples)} similar past builds (top similarity: {top_score:.3f})"
         )
 
         return {
@@ -138,7 +134,7 @@ async def memory_retrieve_node(
         return {
             "events": [
                 Event(
-                    timestamp=datetime.utcnow(),
+                    timestamp=now_utc(),
                     type=EventType.ERROR,
                     phase=Phase.INIT,
                     payload={"error": f"Memory retrieval failed: {e}"},

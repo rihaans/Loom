@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from loom._time import now_utc
 from loom.state.enums import (
     AgentRole,
     ComponentLocation,
@@ -27,6 +28,7 @@ from loom.state.enums import (
     Phase,
     Priority,
     ProjectType,
+    ReviewSeverity,
     TargetAgent,
     TechLayer,
 )
@@ -250,6 +252,60 @@ class QAFeedback(BaseModel):
 
 
 # =============================================================================
+# Code Review Models (generator-critic loop)
+# =============================================================================
+
+
+class ReviewIssue(BaseModel):
+    """A single issue raised by the Code Reviewer about the generated code."""
+
+    severity: ReviewSeverity
+    file: str = Field(..., description="Path of the offending file, or '' if cross-cutting")
+    description: str = Field(..., min_length=1, description="What is wrong and why it matters")
+    suggested_fix: str = Field(..., min_length=1, description="Concrete change the dev should make")
+
+
+class ReviewReport(BaseModel):
+    """Verdict from the Code Reviewer on a code bundle.
+
+    This is the artifact in the generator-critic loop: the developers generate,
+    the reviewer critiques. When ``approved`` is False the build routes back to
+    the targeted developer(s) with these issues as revision instructions, up to
+    a bounded number of iterations.
+    """
+
+    approved: bool = Field(..., description="True if the code is good enough to proceed to QA")
+    summary: str = Field(..., min_length=1, description="One-paragraph overall assessment")
+    issues: list[ReviewIssue] = Field(default_factory=list)
+    target_agent: TargetAgent = Field(
+        default=TargetAgent.BOTH,
+        description="Which developer(s) should address the issues",
+    )
+    escalate_to_architect: bool = Field(
+        default=False,
+        description=(
+            "True if the root cause is an architecture/stack decision rather than a "
+            "code defect — routes back to the Architect to revise the design, not the devs."
+        ),
+    )
+
+    @property
+    def blocking_issues(self) -> list[ReviewIssue]:
+        """Issues serious enough to require a revision (critical or major)."""
+        return [i for i in self.issues if i.severity != ReviewSeverity.MINOR]
+
+    @model_validator(mode="after")
+    def validate_consistency(self) -> ReviewReport:
+        """Approved reports must not carry blocking issues."""
+        if self.approved and self.blocking_issues:
+            raise ValueError(
+                "A report cannot be 'approved' while it has critical/major issues; "
+                "set approved=False or downgrade the issues to minor."
+            )
+        return self
+
+
+# =============================================================================
 # DevOps Models
 # =============================================================================
 
@@ -276,7 +332,7 @@ class DevOpsBundle(BaseModel):
 class Event(BaseModel):
     """An event in the build timeline."""
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=now_utc)
     type: EventType
     agent: AgentRole | None = None
     phase: Phase | None = None
@@ -338,9 +394,14 @@ class AgentState(BaseModel):
     prd: PRD | None = None
     architecture: ArchitectureDoc | None = None
     code_files: Annotated[dict[str, FileBundle], merge_dicts] = Field(default_factory=dict)
+    review_report: ReviewReport | None = None
     test_report: TestReport | None = None
     qa_feedback: QAFeedback | None = None
     devops_files: DevOpsBundle | None = None
+
+    # Code-review loop (generator-critic) bookkeeping
+    review_count: int = Field(default=0, ge=0)
+    max_review_iterations: int = Field(default=1, ge=0)
 
     # Memory (injected before Architect, used for few-shot context)
     # Uses Any to avoid circular import with loom.memory.models
@@ -428,6 +489,7 @@ class AgentState(BaseModel):
 # canonical Pydantic schema for validation. This TypedDict is purely the
 # graph-channel descriptor.
 
+
 class LoomGraphState(TypedDict, total=False):
     """LangGraph channel schema for Loom's state machine."""
 
@@ -445,9 +507,12 @@ class LoomGraphState(TypedDict, total=False):
     prd: PRD | None
     architecture: ArchitectureDoc | None
     code_files: Annotated[dict[str, FileBundle], merge_dicts]
+    review_report: ReviewReport | None
     test_report: TestReport | None
     qa_feedback: QAFeedback | None
     devops_files: DevOpsBundle | None
+    review_count: int
+    max_review_iterations: int
 
     # Memory + plan
     memory_context: Any | None

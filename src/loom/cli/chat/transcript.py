@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from loom._time import now_utc
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CHAT_DIR = Path.home() / ".loom" / "chats"
@@ -33,7 +35,7 @@ def get_chat_path(thread_id: str, base_dir: Path | None = None) -> Path:
 
 def append_event(path: Path, event: dict[str, Any]) -> None:
     """Append one event as a JSON line to the transcript file."""
-    enriched = {"timestamp": datetime.utcnow().isoformat(), **event}
+    enriched = {"timestamp": now_utc().isoformat(), **event}
     try:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(enriched, default=_json_default) + "\n")
@@ -74,7 +76,7 @@ def list_transcripts(base_dir: Path | None = None) -> list[dict[str, Any]]:
             )
         except OSError:
             continue
-    entries.sort(key=lambda e: e["modified_at"], reverse=True)
+    entries.sort(key=lambda e: str(e["modified_at"]), reverse=True)
     return entries
 
 

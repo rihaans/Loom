@@ -5,9 +5,9 @@ Decides the next phase based on current state.
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
+from loom._time import now_utc
 from loom.state.enums import AgentRole, EventType, Phase
 from loom.state.models import Event
 
@@ -41,10 +41,10 @@ def decide_next_phase(state: dict[str, Any]) -> Phase:
     max_retries = state.get("max_retries", 2)
     error = state.get("error")
 
-    # If there's a critical error, don't proceed
+    # If there's a critical error, mark the build failed (terminal).
     if error:
-        logger.warning(f"Error in state, cannot determine next phase: {error}")
-        return Phase.DONE
+        logger.warning(f"Error in state, marking build FAILED: {error}")
+        return Phase.FAILED
 
     # Rule 1: No PRD -> REQUIREMENTS
     if prd is None:
@@ -112,7 +112,7 @@ def project_manager_node(state: dict[str, Any]) -> dict[str, Any]:
 
     events = [
         Event(
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             type=EventType.PHASE_TRANSITION,
             agent=AgentRole.SUPERVISOR,
             phase=next_phase,

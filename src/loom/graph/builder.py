@@ -7,10 +7,12 @@ import logging
 from typing import Any
 
 from langgraph.graph import END, StateGraph
+from langgraph.types import Command
 
 from loom.agents import (
     architect_node,
     backend_dev_node,
+    code_reviewer_node,
     devops_engineer_node,
     frontend_dev_node,
     memory_persist_node,
@@ -103,6 +105,10 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     async def dev_merge(state: dict) -> dict:
         return await _dev_merge_node(state)
 
+    async def reviewer_node(state: dict) -> Command:
+        # Returns a Command for a dynamic handoff (approve -> QA, or revise -> devs).
+        return await code_reviewer_node(state, config)
+
     async def qa_node(state: dict) -> dict:
         return await qa_engineer_node(state, config)
 
@@ -123,6 +129,7 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     graph.add_node("frontend_dev", fe_dev_node)
     graph.add_node("backend_dev", be_dev_node)
     graph.add_node("dev_merge", dev_merge)
+    graph.add_node("code_reviewer", reviewer_node)
     graph.add_node("qa_engineer", qa_node)
     graph.add_node("devops_engineer", devops_node)
     graph.add_node("memory_persist", mem_persist_node)
@@ -150,7 +157,7 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
         route_pm_dispatch,
         {
             "product_manager": "product_manager",  # chat self-loop
-            "architect": "memory_retrieve",         # route to memory_retrieve first
+            "architect": "memory_retrieve",  # route to memory_retrieve first
             "supervisor": "supervisor",
         },
     )
@@ -159,7 +166,7 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     graph.add_edge("memory_retrieve", "architect")
 
     # Architect routes to parallel developers via Send API or supervisor on error
-    def route_architect_to_devs(state: dict):
+    def route_architect_to_devs(state: dict) -> Any:
         """Route from architect to developers (or self-loop in chat mode)."""
         if state.get("error"):
             return "supervisor"
@@ -183,23 +190,25 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     graph.add_edge("frontend_dev", "dev_merge")
     graph.add_edge("backend_dev", "dev_merge")
 
-    # After merge, check for errors and proceed to QA
+    # After merge, check for errors and proceed to the Code Reviewer (the critic
+    # in the generator-critic loop). The reviewer then dynamically hands off via a
+    # Command — approve → QA, or request revisions → back to the targeted dev(s).
     def route_after_dev_merge(state: dict) -> str:
         if state.get("error"):
             return "supervisor"
-        return "qa_engineer"
+        return "code_reviewer"
 
     graph.add_conditional_edges(
         "dev_merge",
         route_after_dev_merge,
         {
-            "qa_engineer": "qa_engineer",
+            "code_reviewer": "code_reviewer",
             "supervisor": "supervisor",
         },
     )
 
     # QA can route to devops, retry devs (via Send), or supervisor
-    def route_qa_with_retry(state: dict):
+    def route_qa_with_retry(state: dict) -> Any:
         """Route after QA with support for targeted developer retry."""
         result = route_after_qa(state)
         if result == "developers":
@@ -235,8 +244,11 @@ def build_linear_graph(config: LoomConfig | None = None) -> StateGraph:
     # Memory persist always goes to END
     graph.add_edge("memory_persist", END)
 
-    # Supervisor routes back to the appropriate agent based on phase
-    graph.add_edge("supervisor", END)  # For now, supervisor goes to end
+    # The supervisor is the error-terminal sink: every node's failure path routes
+    # here (see route_* functions). It records the failure (phase=FAILED) and ends,
+    # so a broken run terminates cleanly with a clear final state rather than
+    # half-completing downstream nodes.
+    graph.add_edge("supervisor", END)
 
     logger.info("Built agent graph with parallel developer execution")
 

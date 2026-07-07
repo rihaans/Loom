@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from loom._time import now_utc
 from loom.config import LoomConfig, load_config
 from loom.graph.builder import compile_graph
 from loom.graph.checkpoint import (
@@ -36,7 +37,7 @@ class BuildRun:
         self.interactive = interactive
 
         self.status = "pending"
-        self.started_at = datetime.utcnow()
+        self.started_at = now_utc()
         self.completed_at: datetime | None = None
         self.current_agent: str | None = None
         self.progress = 0
@@ -68,7 +69,7 @@ class BuildRun:
 class BuildRunner:
     """Manages background build tasks."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.runs: dict[str, BuildRun] = {}
         self._tasks: dict[str, asyncio.Task] = {}
 
@@ -116,7 +117,7 @@ class BuildRunner:
             "devops_engineer",
         ]
 
-        def update_progress(event):
+        def update_progress(event: Any) -> None:
             if event.node in agent_order:
                 idx = agent_order.index(event.node)
                 run.progress = int((idx + 1) / len(agent_order) * 100)
@@ -125,21 +126,27 @@ class BuildRunner:
         observer.on(StreamEventType.NODE_START, update_progress)
 
         # Forward events to observers
-        async def forward_event(event):
-            await run.notify({
-                "type": "event",
-                "data": {
-                    "event_type": event.type.value,
-                    "node": event.node,
-                    "agent": event.agent.value if event.agent else None,
-                    "token": event.token,
-                    "error": event.error,
-                },
-                "timestamp": event.timestamp.isoformat(),
-            })
+        async def forward_event(event: Any) -> None:
+            await run.notify(
+                {
+                    "type": "event",
+                    "data": {
+                        "event_type": event.type.value,
+                        "node": event.node,
+                        "agent": event.agent.value if event.agent else None,
+                        "token": event.token,
+                        "error": event.error,
+                    },
+                    "timestamp": event.timestamp.isoformat(),
+                }
+            )
 
         for event_type in StreamEventType:
-            observer.on(event_type, lambda e: asyncio.create_task(forward_event(e)))
+            # Fire-and-forget async forwarding; the callback's return is ignored.
+            observer.on(
+                event_type,
+                lambda e: asyncio.create_task(forward_event(e)),  # type: ignore[arg-type]
+            )
 
         # Create initial state
         initial_state = {
@@ -172,18 +179,20 @@ class BuildRunner:
             run.error = str(e)
 
         finally:
-            run.completed_at = datetime.utcnow()
+            run.completed_at = now_utc()
             run.current_agent = None
 
             # Notify completion
-            await run.notify({
-                "type": "complete",
-                "data": {
-                    "status": run.status,
-                    "error": run.error,
-                },
-                "timestamp": datetime.utcnow().isoformat(),
-            })
+            await run.notify(
+                {
+                    "type": "complete",
+                    "data": {
+                        "status": run.status,
+                        "error": run.error,
+                    },
+                    "timestamp": now_utc().isoformat(),
+                }
+            )
 
 
 # Global runner instance

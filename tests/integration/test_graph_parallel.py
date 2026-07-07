@@ -5,8 +5,6 @@ Tests the parallel routing and result merging logic.
 
 from unittest.mock import Mock
 
-import pytest
-
 from loom.graph.parallel import (
     get_retry_targets,
     merge_dev_results,

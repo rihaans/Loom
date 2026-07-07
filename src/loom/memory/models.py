@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from loom._time import now_utc
+
 if TYPE_CHECKING:
     from loom.state.models import AgentState
 
@@ -124,7 +126,7 @@ class MemoryRecord(BaseModel):
 
         return cls(
             run_id=run_id,
-            timestamp=datetime.utcnow(),
+            timestamp=now_utc(),
             descriptor=descriptor,
             project_type=prd.project_type.value if prd else "unknown",
             stack_summary=stack_summary,
@@ -164,9 +166,7 @@ class MemoryContext(BaseModel):
 
         lines = ["# Similar past builds (use as guidance, not constraints)"]
 
-        for i, (rec, score) in enumerate(
-            zip(self.examples, self.similarity_scores, strict=True)
-        ):
+        for i, (rec, score) in enumerate(zip(self.examples, self.similarity_scores, strict=True)):
             lines.append(f"\n## Example {i + 1} (similarity {score:.2f})")
             lines.append(f"Project: {rec.one_liner}")
             lines.append(f"Stack chosen: {rec.stack_summary}")
@@ -195,7 +195,9 @@ def build_descriptor(prd: Any) -> str:
     parts = []
 
     # Project type and one-liner
-    project_type = prd.project_type.value if hasattr(prd.project_type, "value") else str(prd.project_type)
+    project_type = (
+        prd.project_type.value if hasattr(prd.project_type, "value") else str(prd.project_type)
+    )
     parts.append(f"{project_type} | {prd.one_liner}")
 
     # Must-have features

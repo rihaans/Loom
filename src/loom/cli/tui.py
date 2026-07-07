@@ -1,7 +1,6 @@
 """Textual TUI for Loom build visualization."""
 
 import asyncio
-from datetime import datetime
 from typing import Any, ClassVar
 
 from rich.console import Console
@@ -13,6 +12,7 @@ from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Label, Log, Static
 
+from loom._time import now_utc
 from loom.config import LoomConfig
 from loom.observability import BuildObserver, StreamEvent, StreamEventType
 from loom.state.enums import AgentRole, Priority
@@ -25,7 +25,7 @@ AGENT_INFO = {
     AgentRole.BACKEND_DEV: ("BE", "magenta"),
     AgentRole.QA: ("QA", "yellow"),
     AgentRole.DEVOPS: ("OPS", "red"),
-    AgentRole.PROJECT_MANAGER: ("MGR", "white"),
+    AgentRole.SUPERVISOR: ("MGR", "white"),
 }
 
 
@@ -34,7 +34,7 @@ class AgentStatus(Static):
 
     status = reactive("idle")
 
-    def __init__(self, agent: AgentRole, **kwargs):
+    def __init__(self, agent: AgentRole, **kwargs: Any):
         super().__init__(**kwargs)
         self.agent = agent
         self.label, self.color = AGENT_INFO.get(agent, ("???", "white"))
@@ -105,15 +105,15 @@ class StatsPanel(Static):
 class LiveOutput(Log):
     """Shows live LLM output."""
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs, highlight=True, markup=True)
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs, highlight=True, markup=True)  # type: ignore[call-arg]
 
 
 class EventLog(Log):
     """Shows event timeline."""
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs, highlight=True, markup=True)
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs, highlight=True, markup=True)  # type: ignore[call-arg]
 
     def add_event(self, event: StreamEvent) -> None:
         """Add an event to the log."""
@@ -179,7 +179,7 @@ class BuildApp(App):
     }
     """
 
-    BINDINGS: ClassVar[list[tuple[str, str, str]]] = [
+    BINDINGS: ClassVar[list[Any]] = [
         ("q", "quit", "Quit"),
         ("s", "toggle_stats", "Stats"),
         ("e", "toggle_events", "Events"),
@@ -198,8 +198,8 @@ class BuildApp(App):
         self.output_dir = output_dir
         self.interactive = interactive
         self.observer = BuildObserver()
-        self.start_time = datetime.utcnow()
-        self.result = None
+        self.start_time = now_utc()
+        self.result: dict[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -234,8 +234,13 @@ class BuildApp(App):
         # Set up observer callbacks
         self.observer.on(StreamEventType.NODE_START, lambda e: pipeline.set_active(e.agent))
         self.observer.on(StreamEventType.NODE_END, lambda e: None)
-        self.observer.on(StreamEventType.LLM_TOKEN, lambda e: output.write(e.token or ""))
-        self.observer.on(StreamEventType.ERROR, lambda e: pipeline.set_error(e.agent) if e.agent else None)
+        self.observer.on(
+            StreamEventType.LLM_TOKEN,
+            lambda e: output.write(e.token or ""),  # type: ignore[arg-type]
+        )
+        self.observer.on(
+            StreamEventType.ERROR, lambda e: pipeline.set_error(e.agent) if e.agent else None
+        )
 
         # All events go to event log
         for event_type in StreamEventType:
@@ -260,9 +265,9 @@ class BuildApp(App):
         run_config = get_checkpoint_config(thread_id)
 
         # Update elapsed time periodically
-        async def update_stats():
+        async def update_stats() -> None:
             while True:
-                elapsed = (datetime.utcnow() - self.start_time).total_seconds()
+                elapsed = (now_utc() - self.start_time).total_seconds()
                 stats.elapsed = elapsed
                 await asyncio.sleep(0.5)
 
@@ -329,7 +334,12 @@ class PlanRenderer:
         """
         self.console = console or Console()
 
-    def render(self, state: dict[str, Any], provider: str = "anthropic", model: str = "claude-sonnet-4-20250514") -> None:
+    def render(
+        self,
+        state: dict[str, Any],
+        provider: str = "anthropic",
+        model: str = "claude-sonnet-4-20250514",
+    ) -> None:
         """Render the plan to the console.
 
         Args:
@@ -350,11 +360,13 @@ class PlanRenderer:
         # Header panel
         project_name = getattr(prd, "project_name", "Unknown")
         one_liner = getattr(prd, "one_liner", "")
-        self.console.print(Panel(
-            f"[bold]{project_name}[/bold]\n{one_liner}",
-            title="PLAN",
-            border_style="cyan",
-        ))
+        self.console.print(
+            Panel(
+                f"[bold]{project_name}[/bold]\n{one_liner}",
+                title="PLAN",
+                border_style="cyan",
+            )
+        )
 
         # Scope (P0 features)
         self.console.print("\n[bold]Scope (P0)[/bold]")
@@ -391,7 +403,11 @@ class PlanRenderer:
                 if version and version != "latest":
                     tech_str += f" {version}"
 
-                stack_table.add_row(layer_str, tech_str, rationale[:40] + "..." if len(rationale) > 40 else rationale)
+                stack_table.add_row(
+                    layer_str,
+                    tech_str,
+                    rationale[:40] + "..." if len(rationale) > 40 else rationale,
+                )
 
             self.console.print(stack_table)
 
@@ -404,7 +420,9 @@ class PlanRenderer:
                     path = getattr(ep, "path", "")
                     description = getattr(ep, "description", "")
                     method_str = str(method).replace("HttpMethod.", "")
-                    self.console.print(f"   [bold]{method_str:6}[/bold] {path:30} {description[:30]}")
+                    self.console.print(
+                        f"   [bold]{method_str:6}[/bold] {path:30} {description[:30]}"
+                    )
                 if len(endpoints) > 8:
                     self.console.print(f"   [dim]... {len(endpoints) - 8} more[/dim]")
 
@@ -439,4 +457,6 @@ class PlanRenderer:
             examples = getattr(memory_context, "examples", [])
             if examples:
                 n = len(examples)
-                self.console.print(f"[bold]Memory:[/bold] {n} similar past build{'s' if n != 1 else ''} used as references")
+                self.console.print(
+                    f"[bold]Memory:[/bold] {n} similar past build{'s' if n != 1 else ''} used as references"
+                )

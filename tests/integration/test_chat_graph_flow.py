@@ -7,12 +7,10 @@ Verifies that interactive=True compilation:
   - Resumes correctly after update_state injects pending_user_input
 """
 
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-
 from langgraph.checkpoint.memory import MemorySaver
 
 from loom.config import LoomConfig
@@ -28,6 +26,8 @@ from loom.graph.routing import (
 def _async_safe_checkpointer() -> MemorySaver:
     """Use MemorySaver — SqliteSaver does not support async graphs."""
     return MemorySaver()
+
+
 from loom.state.models import (
     PRD,
     ArchitectureDoc,
@@ -38,10 +38,10 @@ from loom.state.models import (
     UserStory,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_prd() -> PRD:
     return PRD(
@@ -210,6 +210,7 @@ class TestChatFlowEndToEnd:
     @pytest.mark.asyncio
     async def test_pm_pauses_after_first_turn(self) -> None:
         """First PM turn returns wait_for_input; graph should pause."""
+
         # Patch product_manager_node to act conversationally
         async def fake_pm(state, config=None, llm=None):
             return {
@@ -253,6 +254,7 @@ class TestChatFlowEndToEnd:
     @pytest.mark.asyncio
     async def test_state_writes_persisted_across_turns(self) -> None:
         """A state snapshot taken after PM ran should preserve agent fields."""
+
         async def fake_pm(state, config=None, llm=None):
             return {
                 "agent_messages": {

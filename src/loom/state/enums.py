@@ -10,6 +10,7 @@ class Phase(StrEnum):
     REQUIREMENTS = "requirements"
     DESIGN = "design"
     DEVELOPMENT = "development"
+    REVIEW = "review"
     TESTING = "testing"
     DEPLOYMENT = "deployment"
     DONE = "done"
@@ -23,6 +24,7 @@ class AgentRole(StrEnum):
     ARCHITECT = "architect"
     FRONTEND_DEV = "frontend_dev"
     BACKEND_DEV = "backend_dev"
+    CODE_REVIEWER = "code_reviewer"
     QA = "qa_engineer"
     DEVOPS = "devops_engineer"
     SUPERVISOR = "project_manager"
@@ -108,3 +110,11 @@ class TargetAgent(StrEnum):
     FRONTEND_DEV = "frontend_dev"
     BACKEND_DEV = "backend_dev"
     BOTH = "both"
+
+
+class ReviewSeverity(StrEnum):
+    """Severity of an issue raised by the Code Reviewer."""
+
+    CRITICAL = "critical"  # Will not run / security hole / data loss — must fix
+    MAJOR = "major"  # Wrong behaviour or missing requirement — should fix
+    MINOR = "minor"  # Style / polish — non-blocking

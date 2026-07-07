@@ -13,8 +13,8 @@ from loom.state.enums import AgentRole
 # Try to import tomllib (Python 3.11+) or tomli
 try:
     import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - Python < 3.11 fallback
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 CONFIG_FILENAME = "loom.toml"

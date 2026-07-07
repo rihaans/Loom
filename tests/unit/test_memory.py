@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from loom.memory.embedder import EMBEDDING_DIM, Embedder, LocalEmbedder, OpenAIEmbedder
+from loom.memory.embedder import EMBEDDING_DIM, LocalEmbedder, OpenAIEmbedder
 from loom.memory.factory import (
     get_embedder,
     get_memory_store,
@@ -19,7 +19,7 @@ from loom.memory.models import (
     MemoryRecord,
     build_descriptor,
 )
-from loom.memory.store import InMemoryStore, MemoryStore
+from loom.memory.store import InMemoryStore
 
 
 class TestMemoryConfig:
@@ -287,7 +287,11 @@ class TestInMemoryStore:
         assert store.count() == 0
 
     def test_export_import(
-        self, store: InMemoryStore, sample_record: MemoryRecord, sample_embedding: list[float], tmp_path: Path
+        self,
+        store: InMemoryStore,
+        sample_record: MemoryRecord,
+        sample_embedding: list[float],
+        tmp_path: Path,
     ) -> None:
         """Test exporting and importing records."""
         store.upsert(sample_record, sample_embedding)
@@ -324,7 +328,9 @@ class TestFactory:
         with patch.dict("sys.modules", {"lancedb": None, "sentence_transformers": None}):
             # Force reimport
             import importlib
+
             from loom.memory import factory
+
             importlib.reload(factory)
             # The function checks imports, but we can't easily test this
             # Just verify the function exists and returns bool

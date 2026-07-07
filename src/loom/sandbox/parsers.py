@@ -34,11 +34,15 @@ def parse_pytest_output(stdout: str, stderr: str = "") -> TestReport:
             data = json.loads(json_match.group())
             for test in data.get("tests", []):
                 outcome = test.get("outcome", "unknown")
+                nodeid = test.get("nodeid", "unknown")
                 test_cases.append(
                     TestCase(
-                        name=test.get("nodeid", "unknown"),
+                        name=nodeid,
+                        file=nodeid.split("::")[0],
                         passed=outcome == "passed",
-                        error_message=test.get("call", {}).get("longrepr") if outcome == "failed" else None,
+                        error_message=test.get("call", {}).get("longrepr")
+                        if outcome == "failed"
+                        else None,
                         duration_ms=int(test.get("duration", 0) * 1000),
                     )
                 )
@@ -54,7 +58,8 @@ def parse_pytest_output(stdout: str, stderr: str = "") -> TestReport:
                 failed=failed,
                 skipped=skipped,
                 total=passed + failed + skipped,
-                test_cases=test_cases,
+                duration_ms=sum(tc.duration_ms for tc in test_cases),
+                cases=test_cases,
                 raw_output=stdout[:5000],
             )
     except (json.JSONDecodeError, KeyError):
@@ -68,6 +73,7 @@ def parse_pytest_output(stdout: str, stderr: str = "") -> TestReport:
         test_cases.append(
             TestCase(
                 name=name,
+                file=name.split("::")[0],
                 passed=outcome == "PASSED",
                 error_message=None,  # Would need more parsing for error details
                 duration_ms=0,
@@ -103,7 +109,8 @@ def parse_pytest_output(stdout: str, stderr: str = "") -> TestReport:
         failed=failed,
         skipped=skipped,
         total=total or len(test_cases),
-        test_cases=test_cases,
+        duration_ms=sum(tc.duration_ms for tc in test_cases),
+        cases=test_cases,
         raw_output=stdout[:5000] + ("\n---STDERR---\n" + stderr[:2000] if stderr else ""),
     )
 
@@ -133,6 +140,7 @@ def parse_jest_output(stdout: str, stderr: str = "") -> TestReport:
                 test_cases.append(
                     TestCase(
                         name=f"{result.get('name', 'unknown')}::{assertion.get('title', 'unknown')}",
+                        file=result.get("name", ""),
                         passed=status == "passed",
                         error_message="\n".join(assertion.get("failureMessages", [])) or None,
                         duration_ms=int(assertion.get("duration", 0)),
@@ -150,7 +158,8 @@ def parse_jest_output(stdout: str, stderr: str = "") -> TestReport:
             failed=data.get("numFailedTests", failed),
             skipped=data.get("numPendingTests", skipped),
             total=data.get("numTotalTests", passed + failed + skipped),
-            test_cases=test_cases,
+            duration_ms=sum(tc.duration_ms for tc in test_cases),
+            cases=test_cases,
             raw_output=stdout[:5000],
         )
     except (json.JSONDecodeError, KeyError):
@@ -166,18 +175,18 @@ def parse_jest_output(stdout: str, stderr: str = "") -> TestReport:
     for match in pass_pattern.finditer(stdout):
         name = match.group(1).strip()
         duration = int(match.group(2)) if match.group(2) else 0
-        test_cases.append(TestCase(name=name, passed=True, duration_ms=duration))
+        test_cases.append(TestCase(name=name, file="", passed=True, duration_ms=duration))
         passed += 1
 
     for match in fail_pattern.finditer(stdout):
         name = match.group(1).strip()
         duration = int(match.group(2)) if match.group(2) else 0
-        test_cases.append(TestCase(name=name, passed=False, duration_ms=duration))
+        test_cases.append(TestCase(name=name, file="", passed=False, duration_ms=duration))
         failed += 1
 
     for match in skip_pattern.finditer(stdout):
         name = match.group(1).strip()
-        test_cases.append(TestCase(name=name, passed=True, duration_ms=0))
+        test_cases.append(TestCase(name=name, file="", passed=True, duration_ms=0))
         skipped += 1
 
     # Try summary: Tests: X passed, Y failed, Z total
@@ -197,7 +206,8 @@ def parse_jest_output(stdout: str, stderr: str = "") -> TestReport:
         failed=failed,
         skipped=skipped,
         total=total or len(test_cases),
-        test_cases=test_cases,
+        duration_ms=sum(tc.duration_ms for tc in test_cases),
+        cases=test_cases,
         raw_output=stdout[:5000] + ("\n---STDERR---\n" + stderr[:2000] if stderr else ""),
     )
 

@@ -105,16 +105,12 @@ class SlashCommandParser:
         raw = text
         stripped = text.strip()
         if not stripped.startswith("/"):
-            return SlashCommandResult(
-                command=SlashCommand.UNKNOWN, args=[], raw=raw
-            )
+            return SlashCommandResult(command=SlashCommand.UNKNOWN, args=[], raw=raw)
 
         # Strip the leading '/'
         body = stripped[1:].strip()
         if not body:
-            return SlashCommandResult(
-                command=SlashCommand.UNKNOWN, args=[], raw=raw
-            )
+            return SlashCommandResult(command=SlashCommand.UNKNOWN, args=[], raw=raw)
 
         parts = body.split()
         cmd_token = parts[0].lower()
@@ -132,18 +128,18 @@ class SlashCommandParser:
 # Help entries — structured so the renderer can present them as a styled
 # table. Each row is (canonical, aliases, description, category).
 HELP_ENTRIES: list[tuple[str, str, str, str]] = [
-    ("/help",     "/?, /h",          "Show this help",                          "Session"),
-    ("/status",   "/info",            "Show current build state",                "Session"),
-    ("/clear",    "/cls",             "Clear the screen (keeps transcript)",     "Session"),
-    ("/quit",     "/q, /exit",        "Exit the session",                        "Session"),
-    ("/done",     "/yes, /y, /draft", "Tell the current agent to commit",        "Workflow"),
-    ("/skip",     "",                 "Accept the current proposal and proceed", "Workflow"),
-    ("/back",     "/undo",            "Restore the previous checkpoint",         "Workflow"),
-    ("/restart",  "/reset",           "Start over from the beginning",           "Workflow"),
-    ("/show",     "",                 "Render: prd | architecture | code | tests", "Artifacts"),
-    ("/save",     "",                 "Save the current chat transcript",        "Artifacts"),
-    ("/model",    "",                 "Switch active LLM, or show current",      "Config"),
-    ("/cost",     "/tokens",          "Show running token and dollar cost",      "Config"),
+    ("/help", "/?, /h", "Show this help", "Session"),
+    ("/status", "/info", "Show current build state", "Session"),
+    ("/clear", "/cls", "Clear the screen (keeps transcript)", "Session"),
+    ("/quit", "/q, /exit", "Exit the session", "Session"),
+    ("/done", "/yes, /y, /draft", "Tell the current agent to commit", "Workflow"),
+    ("/skip", "", "Accept the current proposal and proceed", "Workflow"),
+    ("/back", "/undo", "Restore the previous checkpoint", "Workflow"),
+    ("/restart", "/reset", "Start over from the beginning", "Workflow"),
+    ("/show", "", "Render: prd | architecture | code | tests", "Artifacts"),
+    ("/save", "", "Save the current chat transcript", "Artifacts"),
+    ("/model", "", "Switch active LLM, or show current", "Config"),
+    ("/cost", "/tokens", "Show running token and dollar cost", "Config"),
 ]
 
 
