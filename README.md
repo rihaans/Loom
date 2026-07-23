@@ -32,7 +32,8 @@ A real-time view of a build: the agent graph (with the Code Reviewer's `revise` 
 
 <p align="center">
   <img src="docs/screenshots/home.png" alt="Loom dashboard — home" width="860"><br><br>
-  <img src="docs/screenshots/build.png" alt="Loom dashboard — live build graph" width="860">
+  <img src="docs/screenshots/build.png" alt="Loom dashboard — live build graph" width="860"><br><br>
+  <img src="docs/screenshots/runs.png" alt="Loom dashboard — build history" width="860">
 </p>
 
 ---
@@ -98,7 +99,7 @@ You can `cd` into the output folder and `docker-compose up` to run the app immed
 
 ## The Agents
 
-Each agent is a node in a stateful LangGraph state machine. They exchange typed Pydantic artifacts (PRDs, ArchitectureDocs, FileBundles, ReviewReports, TestReports), not free-form chat. Artifacts are produced with the model's **native structured-output mode** (tool/JSON calling) rather than parsing JSON out of free text — see [ADR 0001](.docs/adrs/0001-native-structured-output.md).
+Each agent is a node in a stateful LangGraph state machine. They exchange typed Pydantic artifacts (PRDs, ArchitectureDocs, FileBundles, ReviewReports, TestReports), not free-form chat. Artifacts are produced with the model's **native structured-output mode** (tool/JSON calling) rather than parsing JSON out of free text — see [ADR 0001](docs/adrs/0001-native-structured-output.md).
 
 | # | Agent | Role | Input | Output |
 |---|---|---|---|---|
@@ -116,7 +117,7 @@ Each agent is a node in a stateful LangGraph state machine. They exchange typed 
 
 **Conversational vs. one-shot:** PM and Architect run in *conversational mode* during chat (multi-turn back-and-forth, then commit); the other five run in *one-shot mode* (single LLM call → artifact). When invoked via `loom build "..."` everything runs one-shot.
 
-**The generator–critic loop:** after the developers produce code, the **Code Reviewer** judges it as a whole against the PRD and architecture and returns a `ReviewReport`. Based on its verdict it issues a LangGraph `Command` handoff — approve → QA, code defect → back to the targeted developer(s), or design defect → *upstream* to the Architect to revise the stack. The loop is bounded by `max_review_iterations` so it always terminates, and a reviewer failure degrades gracefully to QA. See [ADR 0002](.docs/adrs/0002-code-reviewer-generator-critic-loop.md) and [ADR 0003](.docs/adrs/0003-command-based-handoffs.md).
+**The generator–critic loop:** after the developers produce code, the **Code Reviewer** judges it as a whole against the PRD and architecture and returns a `ReviewReport`. Based on its verdict it issues a LangGraph `Command` handoff — approve → QA, code defect → back to the targeted developer(s), or design defect → *upstream* to the Architect to revise the stack. The loop is bounded by `max_review_iterations` so it always terminates, and a reviewer failure degrades gracefully to QA. See [ADR 0002](docs/adrs/0002-code-reviewer-generator-critic-loop.md) and [ADR 0003](docs/adrs/0003-command-based-handoffs.md).
 
 ---
 
@@ -168,7 +169,7 @@ The pipeline is a [LangGraph state machine](https://langchain-ai.github.io/langg
                           END
 ```
 
-(The reviewer's "escalate" edge routes back up to the Architect, which then re-fans to the developers — omitted from the ASCII for clarity; see [ADR 0002](.docs/adrs/0002-code-reviewer-generator-critic-loop.md).)
+(The reviewer's "escalate" edge routes back up to the Architect, which then re-fans to the developers — omitted from the ASCII for clarity; see [ADR 0002](docs/adrs/0002-code-reviewer-generator-critic-loop.md).)
 
 **Key LangGraph patterns used:**
 - **Conditional edges** — routing decisions based on state (e.g., did tests pass?)
@@ -185,8 +186,8 @@ The pipeline is a [LangGraph state machine](https://langchain-ai.github.io/langg
 
 ```bash
 # Clone + install
-git clone <repo-url>
-cd CodeCrew
+git clone https://github.com/rihaans/CodeCrew.git loom
+cd loom
 pip install -e ".[dev]"
 
 # Pick an LLM provider — one of:
@@ -515,7 +516,7 @@ QA             →  TestReport          →  DevOps (or back to Devs)
 DevOps         →  DevOpsBundle        →  Memory Persist → END
 ```
 
-Artifacts are produced via native structured output (`with_structured_output`), so the model is constrained to the schema rather than emitting JSON as free text. If a provider lacks structured output, Loom falls back to a text parser; on bad output the agent retries with the parse error fed back as feedback (up to 3 attempts per agent). See [ADR 0001](.docs/adrs/0001-native-structured-output.md).
+Artifacts are produced via native structured output (`with_structured_output`), so the model is constrained to the schema rather than emitting JSON as free text. If a provider lacks structured output, Loom falls back to a text parser; on bad output the agent retries with the parse error fed back as feedback (up to 3 attempts per agent). See [ADR 0001](docs/adrs/0001-native-structured-output.md).
 
 ### State management
 
@@ -604,7 +605,7 @@ tests/
 └── integration/              ← end-to-end pipeline tests
 
 docker/sandbox.Dockerfile     ← QA sandbox image
-.docs/                        ← design specs (single source of truth)
+docs/adrs/                    ← architecture decision records
 loom.example.toml             ← config template
 pyproject.toml                ← deps + entry points + tooling
 ```
@@ -633,7 +634,7 @@ loom build "todo app"
 3. Wire it into the graph in `src/loom/graph/builder.py`
 4. Add routing logic to `src/loom/graph/routing.py` if conditional
 5. Write unit tests under `tests/unit/test_<agent>.py`
-6. Update `docs/AGENTS.md` with the new agent's contract
+6. Record any architecturally significant decision as a new ADR in `docs/adrs/`
 
 ### Debug mode
 
@@ -686,38 +687,18 @@ The test suite uses **mocked LLMs** for unit tests and **fully scripted** end-to
 ## Project Structure
 
 ```
-CodeCrew/
+loom/
 ├── README.md                ← you are here
 ├── pyproject.toml           ← Python package config
 ├── loom.example.toml        ← config template
-├── .docs/                   ← design specs (PRD, AGENTS, GRAPH_DESIGN, etc.)
-│   ├── README.md
-│   ├── adrs/                ← architecture decision records (this project's own)
-│   ├── PROGRESS.md          ← live task tracker
-│   ├── IMPLEMENTATION_PLAN.md
-│   ├── PRD.md
-│   ├── ARCHITECTURE.md
-│   ├── AGENTS.md
-│   ├── GRAPH_DESIGN.md
-│   ├── DATA_MODELS.md
-│   ├── PROMPTS.md
-│   ├── TECH_STACK.md
-│   ├── MODEL_SELECTION.md
-│   ├── SANDBOX.md
-│   ├── UI_SPEC.md
-│   ├── CHAT_INTERFACE.md
-│   ├── CONVERSATIONAL_AGENTS.md
-│   ├── MEMORY_SYSTEM.md
-│   ├── PLAN_COMMAND.md
-│   ├── ADR_GENERATION.md
-│   ├── TESTING_STRATEGY.md
-│   ├── DEMO_SCENARIOS.md
-│   └── FILE_STRUCTURE.md
-├── src/loom/                ← implementation
-├── tests/                   ← test suite
-├── docker/sandbox.Dockerfile← QA sandbox
-├── output/                  ← generated projects land here (gitignored)
-└── frontend/                ← optional dashboard UI
+├── src/loom/                ← implementation (see Development for the full tree)
+├── tests/                   ← unit + integration test suite
+├── frontend/                ← web dashboard (React + Vite + Tailwind)
+├── docker/sandbox.Dockerfile← QA sandbox image
+├── docs/
+│   ├── adrs/                ← architecture decision records
+│   └── screenshots/         ← README imagery
+└── output/                  ← generated projects land here (gitignored)
 ```
 
 ---
@@ -752,7 +733,7 @@ CodeCrew/
 - Better error panels for Docker / Ollama / API failures
 - 90-second demo screencap
 
-See [`.docs/PROGRESS.md`](./.docs/PROGRESS.md) for the full task tracker and audit trail.
+See the [architecture decision records](docs/adrs/) for the reasoning behind the key design choices.
 
 ---
 

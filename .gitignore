@@ -115,3 +115,15 @@ temp/
 
 # LangSmith traces (if not using cloud)
 .langsmith/
+
+# Internal design docs, agent config, and repo tooling — kept locally,
+# not part of the public repo (ADRs live in docs/adrs/ instead).
+.docs/
+.claude/
+scripts/
+
+# Editor / extension artifacts
+*.vsix
+
+# Screenshot SVG sources — only the rendered PNGs are published.
+docs/screenshots/*.svg
