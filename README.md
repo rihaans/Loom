@@ -186,8 +186,8 @@ The pipeline is a [LangGraph state machine](https://langchain-ai.github.io/langg
 
 ```bash
 # Clone + install
-git clone https://github.com/rihaans/CodeCrew.git loom
-cd loom
+git clone https://github.com/rihaans/Loom.git
+cd Loom
 pip install -e ".[dev]"
 
 # Pick an LLM provider — one of:

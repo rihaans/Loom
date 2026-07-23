@@ -79,7 +79,7 @@ function App() {
             <NavLink to="/" label="New build" />
             <NavLink to="/runs" label="History" />
             <a
-              href="https://github.com/rihaans/CodeCrew"
+              href="https://github.com/rihaans/Loom"
               target="_blank"
               rel="noreferrer"
               className="hidden rounded-lg border border-white/10 px-3 py-1.5 text-sm text-slate-300 transition hover:border-white/25 hover:text-white sm:block"

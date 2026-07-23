@@ -71,9 +71,9 @@ memory = [
 loom = "loom.cli.app:app"
 
 [project.urls]
-Homepage = "https://github.com/rihaans/CodeCrew"
-Documentation = "https://github.com/rihaans/CodeCrew#readme"
-Repository = "https://github.com/rihaans/CodeCrew"
+Homepage = "https://github.com/rihaans/Loom"
+Documentation = "https://github.com/rihaans/Loom#readme"
+Repository = "https://github.com/rihaans/Loom"
 
 [build-system]
 requires = ["hatchling"]
