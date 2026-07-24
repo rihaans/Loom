@@ -13,8 +13,8 @@ export default function EventLog({ messages }: EventLogProps) {
 
   if (events.length === 0) {
     return (
-      <div className="text-gray-500 text-sm">
-        Waiting for events...
+      <div className="font-mono text-sm text-muted">
+        Waiting for events…
       </div>
     )
   }
@@ -26,38 +26,38 @@ export default function EventLog({ messages }: EventLogProps) {
         const eventType = event.data?.event_type
 
         let icon = <Zap className="w-3 h-3" />
-        let color = 'text-gray-400'
+        let color = 'text-muted'
         let label = eventType
 
         if (eventType === 'node_start') {
           icon = <Play className="w-3 h-3" />
-          color = 'text-blue-400'
+          color = 'text-accent'
           label = `Started: ${event.data?.node || event.data?.agent}`
         } else if (eventType === 'node_end') {
           icon = <CheckCircle className="w-3 h-3" />
-          color = 'text-green-400'
+          color = 'text-ok'
           label = `Completed: ${event.data?.node || event.data?.agent}`
         } else if (eventType === 'error') {
           icon = <AlertCircle className="w-3 h-3" />
-          color = 'text-red-400'
+          color = 'text-err'
           label = `Error: ${event.data?.error?.slice(0, 50)}`
         } else if (eventType === 'llm_start') {
           icon = <ArrowRight className="w-3 h-3" />
-          color = 'text-yellow-400'
+          color = 'text-warn'
           label = 'LLM call started'
         } else if (eventType === 'llm_end') {
           icon = <CheckCircle className="w-3 h-3" />
-          color = 'text-yellow-400'
+          color = 'text-warn'
           label = 'LLM call completed'
         }
 
         return (
-          <div key={i} className="flex items-start gap-2 text-sm">
-            <span className="text-gray-500 font-mono text-xs whitespace-nowrap">
+          <div key={i} className="flex items-start gap-2 font-mono text-sm">
+            <span className="text-muted text-xs whitespace-nowrap">
               {time}
             </span>
             <span className={color}>{icon}</span>
-            <span className="text-gray-300 truncate">{label}</span>
+            <span className="text-soft truncate">{label}</span>
           </div>
         )
       })}

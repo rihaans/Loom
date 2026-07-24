@@ -29,41 +29,45 @@ const initialNodes: Node[] = [
   { id: 'ops', type: 'agent', position: { x: 1140, y: 170 }, data: { label: 'DevOps', role: 'devops_engineer' } },
 ]
 
-const flow = (id: string, source: string, target: string, color: string): Edge => ({
+// Champagne for the forward flow; muted amber for the feedback loops.
+const FLOW = '#c9b68c'
+const LOOP = '#cbae74'
+
+const flow = (id: string, source: string, target: string): Edge => ({
   id,
   source,
   target,
   type: 'smoothstep',
   animated: true,
-  style: { stroke: color, strokeWidth: 1.6, opacity: 0.7 },
-  markerEnd: { type: MarkerType.ArrowClosed, color },
+  style: { stroke: FLOW, strokeWidth: 1.4, opacity: 0.55 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: FLOW },
 })
 
-const feedback = (id: string, source: string, target: string, color: string, label: string): Edge => ({
+const feedback = (id: string, source: string, target: string, label: string): Edge => ({
   id,
   source,
   target,
   type: 'smoothstep',
   animated: false,
   label,
-  labelStyle: { fill: color, fontSize: 10, fontWeight: 600 },
+  labelStyle: { fill: LOOP, fontSize: 10, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' },
   labelBgStyle: { fill: '#0f1420', opacity: 0.85 },
-  style: { stroke: color, strokeWidth: 1.4, strokeDasharray: '5 4', opacity: 0.65 },
-  markerEnd: { type: MarkerType.ArrowClosed, color },
+  style: { stroke: LOOP, strokeWidth: 1.3, strokeDasharray: '5 4', opacity: 0.6 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: LOOP },
 })
 
 const initialEdges: Edge[] = [
-  flow('pm-arch', 'pm', 'arch', '#00d9ff'),
-  flow('arch-fe', 'arch', 'fe', '#ff5fd2'),
-  flow('arch-be', 'arch', 'be', '#ff5fd2'),
-  flow('fe-review', 'fe', 'review', '#88c0d0'),
-  flow('be-review', 'be', 'review', '#a3be8c'),
-  flow('review-qa', 'review', 'qa', '#d08770'),
-  flow('qa-ops', 'qa', 'ops', '#ebcb8b'),
+  flow('pm-arch', 'pm', 'arch'),
+  flow('arch-fe', 'arch', 'fe'),
+  flow('arch-be', 'arch', 'be'),
+  flow('fe-review', 'fe', 'review'),
+  flow('be-review', 'be', 'review'),
+  flow('review-qa', 'review', 'qa'),
+  flow('qa-ops', 'qa', 'ops'),
   // generator–critic feedback loops
-  feedback('review-be', 'review', 'be', '#d08770', 'revise'),
-  feedback('review-arch', 'review', 'arch', '#d08770', 'escalate'),
-  feedback('qa-be', 'qa', 'be', '#ebcb8b', 'tests fail'),
+  feedback('review-be', 'review', 'be', 'revise'),
+  feedback('review-arch', 'review', 'arch', 'escalate'),
+  feedback('qa-be', 'qa', 'be', 'tests fail'),
 ]
 
 export default function GraphView({ currentAgent }: GraphViewProps) {
@@ -81,7 +85,7 @@ export default function GraphView({ currentAgent }: GraphViewProps) {
   }, [currentAgent, setNodes])
 
   return (
-    <div className="h-[420px] overflow-hidden rounded-xl border border-white/10 bg-surface-950/60">
+    <div className="h-[420px] overflow-hidden rounded-xl border border-line bg-surface-950/60">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -94,8 +98,8 @@ export default function GraphView({ currentAgent }: GraphViewProps) {
         nodesDraggable={false}
         nodesConnectable={false}
       >
-        <Background variant={BackgroundVariant.Dots} color="#22304a" gap={20} size={1} />
-        <Controls showInteractive={false} className="!border-white/10" />
+        <Background variant={BackgroundVariant.Dots} color="#2a2e36" gap={20} size={1} />
+        <Controls showInteractive={false} className="!border-line" />
       </ReactFlow>
     </div>
   )

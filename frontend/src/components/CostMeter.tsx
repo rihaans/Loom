@@ -30,13 +30,13 @@ export default function CostMeter({ runId }: CostMeterProps) {
   return (
     <div className="flex items-center gap-2">
       <div className="glass flex items-center gap-2 px-3 py-1.5 text-sm">
-        <Hash className="h-3.5 w-3.5 text-loom-cyan" />
-        <span className="font-mono tabular-nums text-white">{tokens.toLocaleString()}</span>
-        <span className="text-slate-500">tokens</span>
+        <Hash className="h-3.5 w-3.5 text-accent" />
+        <span className="font-mono tabular-nums text-ink">{tokens.toLocaleString()}</span>
+        <span className="font-mono text-muted">tokens</span>
       </div>
       <div className="glass flex items-center gap-2 px-3 py-1.5 text-sm">
-        <Coins className="h-3.5 w-3.5 text-loom-magenta" />
-        <span className="font-mono tabular-nums text-white">${cost.toFixed(4)}</span>
+        <Coins className="h-3.5 w-3.5 text-accent" />
+        <span className="font-mono tabular-nums text-ink">${cost.toFixed(4)}</span>
       </div>
     </div>
   )

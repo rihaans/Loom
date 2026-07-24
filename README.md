@@ -28,7 +28,7 @@ Typing `/` pops a command menu, and `/help`, `/status`, and `/cost` render as cl
 
 ### Web dashboard (`loom ui`)
 
-A real-time view of a build: the agent graph (with the Code Reviewer's `revise` / `escalate` feedback loops), live progress, cost, and artifacts.
+A real-time view of a build: the agent graph (with the Code Reviewer's `revise` / `escalate` feedback loops), live progress, cost, and artifacts — in the **same restrained charcoal-and-champagne palette as the REPL**, so the CLI and the web UI read as one product.
 
 <p align="center">
   <img src="docs/screenshots/home.png" alt="Loom dashboard — home" width="860"><br><br>
@@ -355,8 +355,8 @@ Long prose like *"yes but also add auth"* is **not** treated as affirmative — 
 
 ### Visual experience
 
-- **Big LOOM banner** at session start with a cyan→magenta gradient logo
-- **Per-agent speaker bars** in their brand colors (📋 cyan, 🏗 magenta, 💻 blue, ⚙ green, 🧪 yellow, 🚀 violet)
+- **Big LOOM banner** at session start with a champagne gold-foil wordmark
+- **Per-agent speaker bars** — a champagne `◇` and the agent's name (monochrome, name-only; state is carried by muted sage/amber/rose, not by a rainbow of hues)
 - **Thinking spinner** between your input and the agent's reply: `⠋ PM is thinking…`
 - **Typewriter rendering** of agent responses (~240 chars/sec)
 - **Rounded panel artifacts** for PRDs and architecture summaries

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBuildStore } from '../store/buildStore'
-import { ArrowRight, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
 
 const EXAMPLES = [
   'Build a todo app with FastAPI backend and React frontend',
@@ -10,15 +10,7 @@ const EXAMPLES = [
   'Create a CLI tool that converts markdown files to PDF',
 ]
 
-const TEAM = [
-  { label: 'PM', color: '#00d9ff' },
-  { label: 'Architect', color: '#ff5fd2' },
-  { label: 'Frontend', color: '#88c0d0' },
-  { label: 'Backend', color: '#a3be8c' },
-  { label: 'Reviewer', color: '#d08770' },
-  { label: 'QA', color: '#ebcb8b' },
-  { label: 'DevOps', color: '#b48ead' },
-]
+const TEAM = ['PM', 'Architect', 'Frontend', 'Backend', 'Reviewer', 'QA', 'DevOps']
 
 export default function Home() {
   const navigate = useNavigate()
@@ -41,16 +33,16 @@ export default function Home() {
     <div className="mx-auto max-w-3xl">
       {/* Hero */}
       <div className="animate-fade-up text-center">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-xs text-slate-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-loom-cyan shadow-glow" />
-          Seven AI agents · generate → review → test → ship
+        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.02] px-3.5 py-1.5 font-mono text-xs text-soft">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-glow" />
+          seven AI agents · generate → review → test → ship
         </div>
-        <h1 className="text-balance text-5xl font-bold leading-[1.1] tracking-tight sm:text-6xl">
+        <h1 className="text-balance text-5xl font-bold leading-[1.1] tracking-tight text-ink sm:text-6xl">
           Type an idea.
           <br />
           <span className="text-gradient">Watch a team build it.</span>
         </h1>
-        <p className="mx-auto mt-5 max-w-xl text-lg text-slate-400">
+        <p className="mx-auto mt-5 max-w-xl text-lg text-soft">
           Loom turns a sentence into a working, tested, containerized project —
           PM, architect, parallel devs, a code reviewer, QA, and DevOps, all collaborating live.
         </p>
@@ -59,7 +51,7 @@ export default function Home() {
       {/* Prompt card */}
       <form
         onSubmit={handleSubmit}
-        className="glass border-gradient mt-10 animate-fade-up space-y-4 p-5 sm:p-6"
+        className="glass border-accent-hairline mt-10 animate-fade-up space-y-4 p-5 sm:p-6"
         style={{ animationDelay: '0.08s' }}
       >
         <textarea
@@ -67,7 +59,7 @@ export default function Home() {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe what you want to build…"
           rows={4}
-          className="w-full resize-none rounded-xl border border-white/10 bg-surface-950/60 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-loom-cyan/50 focus:ring-2 focus:ring-loom-cyan/20"
+          className="w-full resize-none rounded-lg border border-line bg-surface-950/60 px-4 py-3 text-ink placeholder-muted outline-none transition focus:border-accent/50 focus:ring-1 focus:ring-accent/25"
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -76,20 +68,20 @@ export default function Home() {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="model (optional) · e.g. anthropic:claude-sonnet-4-5"
-            className="flex-1 rounded-xl border border-white/10 bg-surface-950/60 px-4 py-2.5 font-mono text-sm text-white placeholder-slate-600 outline-none transition focus:border-loom-cyan/50"
+            className="flex-1 rounded-lg border border-line bg-surface-950/60 px-4 py-2.5 font-mono text-sm text-ink placeholder-muted outline-none transition focus:border-accent/50"
           />
           <button
             type="submit"
             disabled={isLoading || !description.trim()}
-            className="group inline-flex items-center justify-center gap-2 rounded-xl bg-loom-gradient bg-[length:200%_200%] px-6 py-2.5 font-semibold text-surface-950 shadow-glow transition hover:animate-gradient-x disabled:cursor-not-allowed disabled:opacity-40"
+            className="group inline-flex items-center justify-center gap-2 rounded-lg bg-gold-foil px-6 py-2.5 font-mono font-semibold text-surface-950 shadow-glow transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Starting…
+                <Loader2 className="h-4 w-4 animate-spin" /> starting…
               </>
             ) : (
               <>
-                Start building
+                start building
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </>
             )}
@@ -97,41 +89,38 @@ export default function Home() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <div className="rounded-lg border border-err/30 bg-err/10 px-4 py-3 text-sm text-err">
             {error}
           </div>
         )}
       </form>
 
-      {/* Team strip */}
+      {/* Team strip — monochrome, name-only (as in the terminal) */}
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        {TEAM.map((a, i) => (
+        {TEAM.map((label, i) => (
           <span
-            key={a.label}
-            className="animate-fade-up rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300"
+            key={label}
+            className="animate-fade-up rounded-full border border-line bg-white/[0.02] px-3 py-1 font-mono text-xs text-soft"
             style={{ animationDelay: `${0.15 + i * 0.04}s` }}
           >
-            <span
-              className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
-              style={{ backgroundColor: a.color }}
-            />
-            {a.label}
+            <span className="mr-1.5 align-middle text-accent">◇</span>
+            {label}
           </span>
         ))}
       </div>
 
       {/* Examples */}
       <div className="mt-12">
-        <div className="mb-3 flex items-center gap-2 text-sm text-slate-400">
-          <Sparkles className="h-4 w-4 text-loom-cyan" />
-          Try an example
+        <div className="mb-3 flex items-center gap-2 font-mono text-sm text-soft">
+          <span className="text-accent">◇</span>
+          try an example
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {EXAMPLES.map((example, i) => (
             <button
               key={i}
               onClick={() => setDescription(example)}
-              className="glass glass-hover animate-fade-up p-4 text-left text-sm text-slate-300"
+              className="glass glass-hover animate-fade-up p-4 text-left text-sm text-soft hover:text-ink"
               style={{ animationDelay: `${0.2 + i * 0.05}s` }}
             >
               {example}

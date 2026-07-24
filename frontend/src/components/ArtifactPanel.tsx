@@ -35,14 +35,14 @@ export default function ArtifactPanel({ runId, type }: ArtifactPanelProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-6 w-6 border-2 border-primary-500 border-t-transparent rounded-full" />
+        <div className="animate-spin h-6 w-6 border-2 border-accent border-t-transparent rounded-full" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
+      <div className="flex items-center justify-center h-64 font-mono text-sm text-soft">
         {error}
       </div>
     )
@@ -69,10 +69,10 @@ export default function ArtifactPanel({ runId, type }: ArtifactPanelProps) {
       <div className="space-y-4">
         {Object.entries(codeFiles).map(([bundleName, bundle]: [string, any]) => (
           <div key={bundleName}>
-            <h3 className="font-semibold mb-2 text-primary-400">{bundleName}</h3>
+            <h3 className="font-mono font-semibold mb-2 text-accent">{bundleName}</h3>
             {bundle.files?.map((file: any) => (
               <div key={file.path} className="mb-4">
-                <div className="text-xs text-gray-400 mb-1 font-mono">{file.path}</div>
+                <div className="text-xs text-muted mb-1 font-mono">{file.path}</div>
                 <pre className="bg-surface-900 p-4 rounded-lg overflow-auto text-sm font-mono">
                   {file.content}
                 </pre>
@@ -88,22 +88,22 @@ export default function ArtifactPanel({ runId, type }: ArtifactPanelProps) {
     const report = artifact.content
     return (
       <div className="space-y-4">
-        <div className="flex gap-4 text-sm">
-          <span className="text-green-400">Passed: {report.passed}</span>
-          <span className="text-red-400">Failed: {report.failed}</span>
-          <span className="text-gray-400">Skipped: {report.skipped}</span>
-          <span className="text-gray-400">Total: {report.total}</span>
+        <div className="flex gap-4 font-mono text-sm">
+          <span className="text-ok">Passed: {report.passed}</span>
+          <span className="text-err">Failed: {report.failed}</span>
+          <span className="text-muted">Skipped: {report.skipped}</span>
+          <span className="text-muted">Total: {report.total}</span>
         </div>
         {report.cases?.map((tc: any, i: number) => (
           <div
             key={i}
             className={`p-3 rounded-lg ${
-              tc.passed ? 'bg-green-900/20 border border-green-800' : 'bg-red-900/20 border border-red-800'
+              tc.passed ? 'bg-ok/10 border border-ok/30' : 'bg-err/10 border border-err/30'
             }`}
           >
-            <div className="font-mono text-sm">{tc.name}</div>
+            <div className="font-mono text-sm text-ink">{tc.name}</div>
             {tc.error_message && (
-              <pre className="mt-2 text-xs text-red-400 whitespace-pre-wrap">
+              <pre className="mt-2 text-xs text-err whitespace-pre-wrap">
                 {tc.error_message}
               </pre>
             )}

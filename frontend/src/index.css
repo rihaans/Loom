@@ -15,7 +15,7 @@ body,
 body {
   font-family: "Inter", system-ui, sans-serif;
   background-color: #070a12;
-  color: #e6edf6;
+  color: #ecedf0;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -26,46 +26,46 @@ pre,
 }
 
 /* ------------------------------------------------------------------ */
-/* Reusable premium primitives                                        */
+/* Restrained primitives — monochrome on charcoal, one champagne accent */
 /* ------------------------------------------------------------------ */
 @layer components {
-  /* Frosted-glass card */
+  /* A quiet panel: thin line, faint ground, soft depth. No frosted rainbow. */
   .glass {
-    @apply rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl shadow-card;
+    @apply rounded-xl border border-line bg-white/[0.02] shadow-card;
   }
 
   .glass-hover {
-    @apply transition duration-300 hover:border-white/20 hover:bg-white/[0.05];
+    @apply transition duration-300 hover:border-accent/30 hover:bg-white/[0.035];
   }
 
-  /* Gradient brand text (the weave) */
+  /* Gold-foil brand text — a narrow champagne sheen, not a rainbow. */
   .text-gradient {
-    @apply bg-loom-gradient bg-clip-text text-transparent;
+    @apply bg-gold-foil bg-clip-text text-transparent;
     background-size: 200% 200%;
-    animation: gradient-x 6s ease infinite;
+    animation: sheen 7s ease infinite;
   }
 
-  /* Gradient hairline border via mask trick */
-  .border-gradient {
+  /* Champagne hairline border via mask trick. */
+  .border-accent-hairline {
     position: relative;
   }
-  .border-gradient::before {
+  .border-accent-hairline::before {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(120deg, #00d9ff, #7ab9ff, #ff5fd2);
+    background: linear-gradient(120deg, #e6d9b0, #c9b68c, #a68f63);
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
       linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.35;
   }
 
-  /* Shimmer sheen overlay (e.g. on progress bars) */
+  /* Faint sheen sweep for the progress bar. */
   .shimmer-sheen {
     position: relative;
     overflow: hidden;
@@ -77,15 +77,15 @@ pre,
     background: linear-gradient(
       100deg,
       transparent 20%,
-      rgba(255, 255, 255, 0.35) 50%,
+      rgba(230, 217, 176, 0.28) 50%,
       transparent 80%
     );
     transform: translateX(-120%);
-    animation: shimmer 1.8s ease-in-out infinite;
+    animation: shimmer 2s ease-in-out infinite;
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — dim gold thread. */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -94,30 +94,36 @@ pre,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 185, 255, 0.25);
+  background: rgba(201, 182, 140, 0.22);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 185, 255, 0.45);
+  background: rgba(201, 182, 140, 0.4);
 }
 
-/* React Flow: blend the canvas into the dark theme */
+/* React Flow: blend the canvas into the dark theme. */
 .react-flow__attribution {
   display: none;
 }
 .react-flow__controls button {
   background: #141a28 !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  color: #9fb3c8 !important;
+  border-color: #2a2e36 !important;
+  color: #a2a7b0 !important;
+}
+.react-flow__controls button:hover {
+  background: #1c2333 !important;
+  color: #ecedf0 !important;
 }
 
-@keyframes gradient-x {
-  0%,
-  100% {
+@keyframes sheen {
+  0% {
     background-position: 0% 50%;
   }
   50% {
     background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
   }
 }
 @keyframes shimmer {

@@ -5,36 +5,23 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Loom brand — the cyan→magenta "weave" (shared with the terminal UI).
-        loom: {
-          cyan: "#00d9ff",
-          sky: "#33cdff",
-          violet: "#7ab9ff",
-          orchid: "#c79bff",
-          pink: "#f176f3",
-          magenta: "#ff5fd2",
+        // Shared with the terminal renderer: near-monochrome on charcoal with a
+        // single soft champagne accent. No rainbows.
+        ink: "#ecedf0", // primary text
+        soft: "#a2a7b0", // secondary text
+        muted: "#6a707a", // labels / tertiary
+        faint: "#454a53", // dim hints
+        line: "#2a2e36", // borders / dividers
+        accent: {
+          DEFAULT: "#c9b68c", // the single accent — soft champagne
+          hi: "#e6d9b0", // light gold (sheen highlight)
+          lo: "#a68f63", // deep gold (sheen low)
         },
-        // Per-agent accents — kept in lockstep with the CLI renderer.
-        agent: {
-          pm: "#00d9ff",
-          architect: "#ff5fd2",
-          frontend: "#88c0d0",
-          backend: "#a3be8c",
-          reviewer: "#d08770",
-          qa: "#ebcb8b",
-          devops: "#b48ead",
-        },
-        primary: {
-          50: "#f0f9ff",
-          100: "#e0f2fe",
-          400: "#38bdf8",
-          500: "#00d9ff",
-          600: "#0284c7",
-          700: "#0369a1",
-        },
+        rail: "#5a4f38", // dim gold thread
+        ok: "#8fb08a", // muted sage (success)
+        warn: "#cbae74", // muted amber (warning)
+        err: "#c58a8a", // muted rose (error)
         surface: {
-          50: "#f8fafc",
-          100: "#f1f5f9",
           700: "#1c2333",
           800: "#141a28",
           850: "#0f1420",
@@ -43,52 +30,43 @@ export default {
         },
       },
       fontFamily: {
+        // The dashboard leans mono like the terminal; Inter carries prose only.
         sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       boxShadow: {
-        glow: "0 0 24px -4px rgba(0, 217, 255, 0.45)",
-        "glow-magenta": "0 0 24px -4px rgba(255, 95, 210, 0.45)",
-        card: "0 10px 40px -12px rgba(0, 0, 0, 0.6)",
+        glow: "0 0 24px -6px rgba(201, 182, 140, 0.30)",
+        card: "0 12px 40px -20px rgba(0, 0, 0, 0.7)",
       },
       backgroundImage: {
-        "loom-gradient": "linear-gradient(120deg, #00d9ff 0%, #7ab9ff 45%, #ff5fd2 100%)",
-        "loom-radial": "radial-gradient(circle at 50% 0%, rgba(0,217,255,0.12), transparent 60%)",
+        // Warm gold foil — a narrow champagne sheen, not a rainbow.
+        "gold-foil": "linear-gradient(120deg, #e6d9b0 0%, #c9b68c 50%, #a68f63 100%)",
+        "gold-radial": "radial-gradient(circle at 50% 0%, rgba(201,182,140,0.10), transparent 62%)",
       },
       keyframes: {
-        "gradient-x": {
-          "0%, 100%": { backgroundPosition: "0% 50%" },
-          "50%": { backgroundPosition: "100% 50%" },
-        },
         "fade-up": {
           "0%": { opacity: "0", transform: "translateY(12px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        float: {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-6px)" },
-        },
         "glow-pulse": {
-          "0%, 100%": { boxShadow: "0 0 0 0 rgba(0,217,255,0.5)" },
-          "50%": { boxShadow: "0 0 0 10px rgba(0,217,255,0)" },
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(201,182,140,0.45)" },
+          "50%": { boxShadow: "0 0 0 9px rgba(201,182,140,0)" },
+        },
+        sheen: {
+          "0%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+          "100%": { backgroundPosition: "0% 50%" },
         },
         shimmer: {
           "0%": { transform: "translateX(-120%)" },
           "100%": { transform: "translateX(220%)" },
         },
-        aurora: {
-          "0%, 100%": { transform: "translate(0,0) scale(1)" },
-          "33%": { transform: "translate(4%, -3%) scale(1.08)" },
-          "66%": { transform: "translate(-3%, 4%) scale(0.96)" },
-        },
       },
       animation: {
-        "gradient-x": "gradient-x 6s ease infinite",
         "fade-up": "fade-up 0.5s ease-out both",
-        float: "float 4s ease-in-out infinite",
         "glow-pulse": "glow-pulse 2s ease-in-out infinite",
-        shimmer: "shimmer 1.8s ease-in-out infinite",
-        aurora: "aurora 18s ease-in-out infinite",
+        sheen: "sheen 7s ease infinite",
+        shimmer: "shimmer 2s ease-in-out infinite",
       },
     },
   },
