@@ -42,6 +42,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   status` / `loom cache clear` to inspect. Leave memory off (`--no-memory`)
   for reproducible runs: memory intentionally changes the architect's prompt
   each time, so it correctly invalidates the cache.
+- **The reviewer no longer re-reads code it already reviewed.** On a revise
+  iteration only the bundle the reviewer handed back is sent in full; the
+  unchanged one is listed as a file index. The review prompt is dominated by the
+  code dump and the reviewer is the node that repeats, so this is the largest
+  avoidable cost in the loop: measured **40-56% off the dump** on a targeted
+  re-review. Every file is still accounted for in the file count.
 - **Stopped sending the JSON schema when the model is already bound to it.**
   Native structured output constrains the model to the schema, so repeating it
   in the prompt was dead weight. Measured saving: **~2,777 tokens per clean

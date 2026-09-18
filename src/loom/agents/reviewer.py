@@ -32,8 +32,31 @@ logger = logging.getLogger(__name__)
 _MAX_FILE_CHARS = 6000
 
 
-def _dump_code(code_files: dict[str, Any]) -> tuple[str, int]:
-    """Render all generated files into a single annotated string for the prompt.
+def _revised_bundles(previous: Any) -> set[str] | None:
+    """Which code bundles were regenerated since the last review, if any.
+
+    Returns None on a first review, when everything is new and must be read in
+    full. On a re-review only the developers the reviewer handed work back to
+    produced new code.
+    """
+    if previous is None:
+        return None
+    target = getattr(previous, "target_agent", None)
+    if target == TargetAgent.FRONTEND_DEV:
+        return {"frontend"}
+    if target == TargetAgent.BACKEND_DEV:
+        return {"backend"}
+    return None  # BOTH, or unknown - re-read everything
+
+
+def _dump_code(code_files: dict[str, Any], revised: set[str] | None = None) -> tuple[str, int]:
+    """Render generated files into a single annotated string for the prompt.
+
+    On a re-review, ``revised`` names the bundles that actually changed. The
+    others are listed as a file index rather than in full: re-sending code the
+    reviewer already read is the largest avoidable cost in the loop, since the
+    review prompt is dominated by the code dump and the reviewer is the node
+    that repeats.
 
     Returns (dump, file_count).
     """
@@ -41,6 +64,14 @@ def _dump_code(code_files: dict[str, Any]) -> tuple[str, int]:
     count = 0
     for bundle_name, bundle in code_files.items():
         files = getattr(bundle, "files", [])
+        if revised is not None and bundle_name not in revised:
+            index = "\n".join(f"  {f.path} ({f.language})" for f in files)
+            count += len(files)
+            blocks.append(
+                f"=== [{bundle_name}] unchanged since your last review "
+                f"({len(files)} files, not repeated) ===\n{index}"
+            )
+            continue
         for f in files:
             count += 1
             content = f.content
@@ -121,7 +152,7 @@ async def code_reviewer_node(
     if budget_error:
         return Command(goto=END, update={"error": budget_error})
 
-    code_dump, file_count = _dump_code(code_files)
+    code_dump, file_count = _dump_code(code_files, _revised_bundles(state.get("review_report")))
     prompt_input = {
         "prd_json": prd.model_dump_json(indent=2),
         "architecture_json": architecture.model_dump_json(indent=2),
