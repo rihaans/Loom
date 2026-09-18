@@ -68,6 +68,13 @@ class LoomConfig(BaseModel):
     use_docker_sandbox: bool = Field(default=True, description="Use Docker for code execution")
     sandbox_timeout_seconds: int = Field(default=90, ge=10, le=600)
     sandbox_memory_mb: int = Field(default=512, ge=64, le=4096)
+    require_sandbox: bool = Field(
+        default=False,
+        description=(
+            "Fail the build when no sandbox is available instead of continuing "
+            "with unverified (stubbed) test results"
+        ),
+    )
 
     # Observability
     enable_langsmith: bool = Field(default=False, description="Enable LangSmith tracing")
@@ -113,4 +120,22 @@ class BuildResult(BaseModel):
     duration_seconds: float = 0.0
     error: str | None = None
     test_passed: bool | None = None
+    cache_hits: int = 0
+    cache_misses: int = 0
+    """How many agent artifacts were reused vs generated.
+
+    Hits cost nothing and take no time. A low hit rate on a repeat build
+    usually means an upstream input changed - the memory system, which injects
+    past builds into the architect's prompt, changes it on every run.
+    """
+    cost_status: str = "priced"
+    """How to read `total_cost_usd`: "priced", "free" (local model), or
+    "unknown" (paid provider with no published price in our table)."""
+    tests_verified: bool = False
+    """True only when tests actually ran in a sandbox.
+
+    When False, `test_passed` carries no evidence about the generated code -
+    either no tests ran at all, or the QA agent fell back to a stub report
+    because no sandbox was available.
+    """
     retry_count: int = 0

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from loom._time import now_utc
+from loom.cache import get_cache
 from loom.config import BuildResult, LoomConfig, load_config
 from loom.graph.builder import compile_graph
 from loom.graph.checkpoint import (
@@ -17,7 +18,8 @@ from loom.graph.checkpoint import (
     get_async_memory_checkpointer_context,
     get_checkpoint_config,
 )
-from loom.output import materialize_state
+from loom.llm.cost import pricing_status
+from loom.output import OutputExistsError, materialize_state
 from loom.state.enums import Phase
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ async def build(
     interactive: bool = False,
     thread_id: str | None = None,
     use_persistence: bool = True,
+    overwrite: bool = True,
 ) -> BuildResult:
     """Run the full agent pipeline to build a project.
 
@@ -143,8 +146,20 @@ async def build(
                     output_dir,
                     write_adrs_enabled=config.adr.enabled,
                     adr_significance=config.adr.significance,
+                    overwrite=overwrite,
                 )
                 logger.info(f"Project created at: {project_dir}")
+            except OutputExistsError as e:
+                logger.error(str(e))
+                return BuildResult(
+                    success=False,
+                    output_dir=None,
+                    error=str(e),
+                    phase=final_phase,
+                    total_tokens=_calculate_tokens(final_state),
+                    total_cost_usd=_calculate_cost(final_state),
+                    duration_seconds=_duration_seconds(start_time),
+                )
             except Exception as e:
                 logger.error(f"Failed to write output files: {e}")
                 return BuildResult(
@@ -166,6 +181,11 @@ async def build(
                 total_tokens=_calculate_tokens(final_state),
                 total_cost_usd=_calculate_cost(final_state),
                 duration_seconds=_duration_seconds(start_time),
+                test_passed=_test_passed(final_state),
+                tests_verified=_tests_verified(final_state),
+                cost_status=pricing_status(config.llm_default.provider, config.llm_default.model),
+                cache_hits=get_cache().stats.hits,
+                cache_misses=get_cache().stats.misses,
             )
 
     except Exception as e:
@@ -179,6 +199,26 @@ async def build(
             total_cost_usd=0.0,
             duration_seconds=_duration_seconds(start_time),
         )
+
+
+def _tests_verified(state: dict[str, Any]) -> bool:
+    """True only when a real test run produced the report in state.
+
+    A missing report means QA never ran; a stubbed report means no sandbox was
+    available and nothing was executed. Neither counts as verified.
+    """
+    report = state.get("test_report")
+    if report is None:
+        return False
+    return not getattr(report, "is_stub", False)
+
+
+def _test_passed(state: dict[str, Any]) -> bool | None:
+    """Whether tests passed, or None when nothing was actually executed."""
+    report = state.get("test_report")
+    if report is None or getattr(report, "is_stub", False):
+        return None
+    return bool(report.failed == 0 and report.total > 0)
 
 
 def _calculate_tokens(state: dict[str, Any]) -> int:
@@ -204,6 +244,7 @@ async def resume_build(
     config: LoomConfig | None = None,
     output_dir: str | Path | None = None,
     user_input: dict[str, Any] | None = None,
+    overwrite: bool = True,
 ) -> BuildResult:
     """Resume an interrupted build session.
 
@@ -279,8 +320,20 @@ async def resume_build(
                     output_dir,
                     write_adrs_enabled=config.adr.enabled,
                     adr_significance=config.adr.significance,
+                    overwrite=overwrite,
                 )
                 logger.info(f"Project created at: {project_dir}")
+            except OutputExistsError as e:
+                logger.error(str(e))
+                return BuildResult(
+                    success=False,
+                    output_dir=None,
+                    error=str(e),
+                    phase=final_phase,
+                    total_tokens=_calculate_tokens(final_state),
+                    total_cost_usd=_calculate_cost(final_state),
+                    duration_seconds=_duration_seconds(start_time),
+                )
             except Exception as e:
                 logger.error(f"Failed to write output files: {e}")
                 return BuildResult(
@@ -302,6 +355,11 @@ async def resume_build(
                 total_tokens=_calculate_tokens(final_state),
                 total_cost_usd=_calculate_cost(final_state),
                 duration_seconds=_duration_seconds(start_time),
+                test_passed=_test_passed(final_state),
+                tests_verified=_tests_verified(final_state),
+                cost_status=pricing_status(config.llm_default.provider, config.llm_default.model),
+                cache_hits=get_cache().stats.hits,
+                cache_misses=get_cache().stats.misses,
             )
 
     except Exception as e:
@@ -324,6 +382,7 @@ def build_sync(
     output_dir: str | Path | None = None,
     interactive: bool = False,
     use_persistence: bool = True,
+    overwrite: bool = True,
 ) -> BuildResult:
     """Synchronous wrapper for the build function.
 
@@ -332,7 +391,14 @@ def build_sync(
     import asyncio
 
     return asyncio.run(
-        build(description, config, output_dir, interactive, use_persistence=use_persistence)
+        build(
+            description,
+            config,
+            output_dir,
+            interactive,
+            use_persistence=use_persistence,
+            overwrite=overwrite,
+        )
     )
 
 

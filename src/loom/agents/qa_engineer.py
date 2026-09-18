@@ -22,6 +22,12 @@ from loom.state.models import Event, QAFeedback, TestCase, TestReport
 
 logger = logging.getLogger(__name__)
 
+SANDBOX_REQUIRED_MESSAGE = (
+    "No sandbox available, so tests cannot actually be run. Install Docker and "
+    "run `loom sandbox build`, or drop --require-sandbox to continue with "
+    "results explicitly marked as unverified."
+)
+
 
 def _create_stub_test_report(prd: Any) -> TestReport:
     """Create a stub test report with fake passing tests.
@@ -59,8 +65,13 @@ def _create_stub_test_report(prd: Any) -> TestReport:
         skipped=0,
         duration_ms=sum(tc.duration_ms for tc in test_cases),
         cases=test_cases,
-        coverage_percent=85.0,
-        raw_output="All tests passed (STUB - sandbox not available)",
+        # No coverage is reported: nothing was executed, so nothing was measured.
+        coverage_percent=None,
+        raw_output=(
+            "NOT VERIFIED - no sandbox was available, so no tests were executed. "
+            "These cases are placeholders derived from the PRD, not results."
+        ),
+        is_stub=True,
     )
 
 
@@ -222,7 +233,30 @@ async def qa_engineer_node(
 
     # Check if sandbox is available
     if not is_sandbox_available():
-        logger.warning("Sandbox not available - using STUB implementation")
+        # Without a sandbox nothing can actually be executed. Depending on
+        # configuration we either fail loudly or continue with a report that is
+        # explicitly marked unverified - we never pretend the tests passed.
+        if config is not None and config.require_sandbox:
+            logger.error("Sandbox required but unavailable - failing the build")
+            events.append(
+                Event(
+                    timestamp=now_utc(),
+                    type=EventType.ERROR,
+                    agent=AgentRole.QA,
+                    phase=Phase.TESTING,
+                    payload={"error": SANDBOX_REQUIRED_MESSAGE},
+                )
+            )
+            return {
+                "events": events,
+                "error": SANDBOX_REQUIRED_MESSAGE,
+                "costs": [],
+            }
+
+        logger.warning(
+            "Sandbox not available - tests were NOT executed. Emitting an "
+            "unverified stub report; results carry no evidence about the code."
+        )
         test_report = _create_stub_test_report(prd)
         events.append(
             Event(
@@ -235,6 +269,7 @@ async def qa_engineer_node(
                     "passed": test_report.passed,
                     "failed": test_report.failed,
                     "stub": True,
+                    "verified": False,
                 },
             )
         )

@@ -223,11 +223,29 @@ class TestReport(BaseModel):
     cases: list[TestCase] = Field(default_factory=list)
     coverage_percent: float | None = Field(default=None, ge=0, le=100)
     raw_output: str = Field(default="", max_length=10000)
+    is_stub: bool = Field(
+        default=False,
+        description=(
+            "True when no sandbox was available and these results were synthesized "
+            "rather than produced by actually running the tests. Stubbed results "
+            "carry no evidence about the generated code and must never be presented "
+            "as a passing test run."
+        ),
+    )
 
     @property
     def all_passed(self) -> bool:
-        """Check if all tests passed."""
-        return self.failed == 0 and self.total > 0
+        """Check if all tests passed.
+
+        Stubbed reports never count as passing - nothing was executed, so there
+        is nothing to have passed.
+        """
+        return not self.is_stub and self.failed == 0 and self.total > 0
+
+    @property
+    def verified(self) -> bool:
+        """True when these results came from a real test execution."""
+        return not self.is_stub
 
     @model_validator(mode="after")
     def validate_totals(self) -> TestReport:

@@ -1,7 +1,12 @@
 """Token to USD cost calculation with provider price tables.
 
-Prices are per 1M tokens as of May 2025.
-Update these when providers change prices.
+Prices are per 1M tokens, current as of 2026-09. Update these when providers
+change prices.
+
+Lookup is exact-match only. An unrecognised model returns None rather than
+silently falling back to a neighbouring model's price - a wrong number shown
+with confidence is worse than an honest "unknown", and the previous prefix
+matching quietly billed `claude-opus-4-8` at Opus 4.5 rates.
 """
 
 from dataclasses import dataclass
@@ -16,9 +21,68 @@ class ModelPricing:
     cached_input_per_million: float | None = None  # For Anthropic prompt caching
 
 
+def _strip_date_suffix(model: str) -> str:
+    """Drop a trailing YYYYMMDD snapshot suffix from a model id.
+
+    "claude-opus-5-20260401" -> "claude-opus-5". Returns the input unchanged
+    when there is no such suffix.
+    """
+    parts = model.rsplit("-", 1)
+    if len(parts) == 2 and len(parts[1]) == 8 and parts[1].isdigit():
+        return parts[0]
+    return model
+
+
 # Anthropic pricing (as of May 2025)
 # https://www.anthropic.com/pricing
 ANTHROPIC_PRICING: dict[str, ModelPricing] = {
+    # Current generation
+    "claude-fable-5-1": ModelPricing(
+        input_per_million=10.00,
+        output_per_million=50.00,
+        cached_input_per_million=1.00,
+    ),
+    "claude-fable-5": ModelPricing(
+        input_per_million=10.00,
+        output_per_million=50.00,
+        cached_input_per_million=1.00,
+    ),
+    "claude-opus-5": ModelPricing(
+        input_per_million=5.00,
+        output_per_million=25.00,
+        cached_input_per_million=0.50,
+    ),
+    "claude-opus-4-8": ModelPricing(
+        input_per_million=5.00,
+        output_per_million=25.00,
+        cached_input_per_million=0.50,
+    ),
+    "claude-opus-4-7": ModelPricing(
+        input_per_million=5.00,
+        output_per_million=25.00,
+        cached_input_per_million=0.50,
+    ),
+    "claude-opus-4-6": ModelPricing(
+        input_per_million=5.00,
+        output_per_million=25.00,
+        cached_input_per_million=0.50,
+    ),
+    "claude-sonnet-5": ModelPricing(
+        input_per_million=2.00,
+        output_per_million=10.00,
+        cached_input_per_million=0.20,
+    ),
+    "claude-sonnet-4-6": ModelPricing(
+        input_per_million=3.00,
+        output_per_million=15.00,
+        cached_input_per_million=0.30,
+    ),
+    "claude-haiku-4-5": ModelPricing(
+        input_per_million=1.00,
+        output_per_million=5.00,
+        cached_input_per_million=0.10,
+    ),
+    # Previous generation
     "claude-opus-4-5": ModelPricing(
         input_per_million=15.00,
         output_per_million=75.00,
@@ -35,6 +99,14 @@ ANTHROPIC_PRICING: dict[str, ModelPricing] = {
         cached_input_per_million=0.08,
     ),
     # Legacy models
+    "claude-opus-4": ModelPricing(
+        input_per_million=15.00,
+        output_per_million=75.00,
+    ),
+    "claude-sonnet-4": ModelPricing(
+        input_per_million=3.00,
+        output_per_million=15.00,
+    ),
     "claude-3-5-sonnet-20241022": ModelPricing(
         input_per_million=3.00,
         output_per_million=15.00,
@@ -101,23 +173,19 @@ def get_pricing(provider: str, model: str) -> ModelPricing | None:
         ModelPricing if found, None for local models
     """
     if provider == "anthropic":
-        # Try exact match first
+        # Exact match only. A dated snapshot ("claude-opus-5-20260401") is
+        # normalised by stripping the trailing date; anything else unknown
+        # returns None so callers can say "unknown" instead of inventing a price.
         if model in ANTHROPIC_PRICING:
             return ANTHROPIC_PRICING[model]
-        # Try prefix match (e.g., "claude-sonnet-4-5" matches variants)
-        for key, pricing in ANTHROPIC_PRICING.items():
-            if model.startswith(key.rsplit("-", 1)[0]):
-                return pricing
-        return None
+        undated = _strip_date_suffix(model)
+        return ANTHROPIC_PRICING.get(undated)
 
     elif provider == "openai":
         if model in OPENAI_PRICING:
             return OPENAI_PRICING[model]
-        # Try prefix match
-        for key, pricing in OPENAI_PRICING.items():
-            if model.startswith(key.split("-")[0]):
-                return pricing
-        return None
+        undated = _strip_date_suffix(model)
+        return OPENAI_PRICING.get(undated)
 
     elif provider == "ollama":
         return None  # Free
@@ -160,6 +228,20 @@ def calculate_cost(
     output_cost = (output_tokens / 1_000_000) * pricing.output_per_million
 
     return input_cost + output_cost
+
+
+def pricing_status(provider: str, model: str) -> str:
+    """Classify how much we know about a model's price.
+
+    Returns:
+        "free" for local providers that cost nothing to run,
+        "priced" when the model is in a price table,
+        "unknown" when it is a paid provider we have no price for - callers
+        should say so rather than displaying $0.00.
+    """
+    if provider == "ollama":
+        return "free"
+    return "priced" if get_pricing(provider, model) is not None else "unknown"
 
 
 def format_cost(cost_usd: float) -> str:

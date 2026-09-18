@@ -60,6 +60,7 @@ def _warm(pos: float) -> str:
     r, g, bl = (round(a[j] + (b[j] - a[j]) * t) for j in range(3))
     return f"#{r:02x}{g:02x}{bl:02x}"
 
+
 # Back-compat aliases (referenced by a few older call sites / tests).
 BRAND_PRIMARY = f"bold {C_ACCENT}"
 BRAND_ACCENT = f"bold {C_ACCENT}"
@@ -259,7 +260,9 @@ class ChatRenderer:
     def _animate_intro(self) -> None:
         """A quiet thread weaves across, then the card lands. Interruptible."""
         try:
-            with Live(Text(""), console=self.console, refresh_per_second=60, transient=True) as live:
+            with Live(
+                Text(""), console=self.console, refresh_per_second=60, transient=True
+            ) as live:
                 self.console.print()
                 for k in range(21):
                     live.update(Padding(_thread(40, k / 20), (1, 0, 1, 4)))
@@ -295,21 +298,36 @@ class ChatRenderer:
         if files is not None:
             row(body, "Files", str(files), C_INK)
         if test_report is not None:
-            passed = getattr(test_report, "passed", 0)
-            total = getattr(test_report, "total", 0)
-            ok = passed == total and total > 0
-            row(body, "Tests", f"{passed}/{total} passing", C_OK if ok else C_WARN)
+            # A stubbed report means no sandbox was available and nothing ran -
+            # showing a pass count here would be a straight lie.
+            if getattr(test_report, "is_stub", False):
+                row(body, "Tests", "NOT RUN - no sandbox available", C_WARN)
+            else:
+                passed = getattr(test_report, "passed", 0)
+                total = getattr(test_report, "total", 0)
+                ok = passed == total and total > 0
+                row(body, "Tests", f"{passed}/{total} passing", C_OK if ok else C_WARN)
         if review_report is not None:
             approved = getattr(review_report, "approved", False)
-            row(body, "Review", "approved" if approved else "shipped with notes",
-                C_OK if approved else C_WARN)
+            row(
+                body,
+                "Review",
+                "approved" if approved else "shipped with notes",
+                C_OK if approved else C_WARN,
+            )
         row(body, "Tokens", f"{total_tokens:,}", C_INK)
         row(body, "Cost", f"${total_cost:.4f}", C_INK)
         body.append("\n")
         body.append(f"{'Next':<8}", style=C_MUTED)
         body.append(f"cd {output_dir} && docker compose up", style=C_ACCENT)
 
-        self._section("Build complete", "your project is ready to run", body)
+        unverified = test_report is not None and getattr(test_report, "is_stub", False)
+        subtitle = (
+            "generated, but untested - no sandbox was available"
+            if unverified
+            else "your project is ready to run"
+        )
+        self._section("Build complete", subtitle, body)
 
     def render_error(self, message: str, hint: str | None = None) -> None:
         """Render a quiet error section."""
@@ -519,7 +537,9 @@ class ChatRenderer:
         else:
             glyph, color = "✕", C_ERR
         self.console.print()
-        self.console.print(Text(f"  {glyph}  Tests: {passed}/{total} passing", style=f"bold {color}"))
+        self.console.print(
+            Text(f"  {glyph}  Tests: {passed}/{total} passing", style=f"bold {color}")
+        )
 
     def clear(self) -> None:
         """Clear the terminal screen. Transcript on disk is untouched."""
@@ -572,7 +592,9 @@ class ChatRenderer:
             header = Text(cat.upper(), style=f"bold {C_ACCENT}")
             groups.append(Group(header, Padding(table, (0, 0, 1, 1))))
 
-        footer = Text("Anything else you type goes to the active agent.\n", style=f"italic {C_FAINT}")
+        footer = Text(
+            "Anything else you type goes to the active agent.\n", style=f"italic {C_FAINT}"
+        )
         for k, sep in [("Esc-Enter", " newline   "), ("Ctrl-C", " abort   "), ("Ctrl-D", " exit")]:
             footer.append(k, style=C_MUTED)
             footer.append(sep, style=C_FAINT)
