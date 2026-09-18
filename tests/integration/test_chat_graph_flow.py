@@ -21,13 +21,6 @@ from loom.graph.routing import (
     route_after_architect_chat,
     route_after_pm_chat,
 )
-
-
-def _async_safe_checkpointer() -> MemorySaver:
-    """Use MemorySaver — SqliteSaver does not support async graphs."""
-    return MemorySaver()
-
-
 from loom.state.models import (
     PRD,
     ArchitectureDoc,
@@ -37,6 +30,12 @@ from loom.state.models import (
     TechLayer,
     UserStory,
 )
+
+
+def _async_safe_checkpointer() -> MemorySaver:
+    """Use MemorySaver — SqliteSaver does not support async graphs."""
+    return MemorySaver()
+
 
 # ---------------------------------------------------------------------------
 # Helpers

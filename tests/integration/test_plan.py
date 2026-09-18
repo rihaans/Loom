@@ -103,10 +103,10 @@ class TestCostEstimation:
 
         complex_state = {"prd": complex_prd, "architecture": complex_arch}
 
-        simple_low, simple_high = estimate_build_cost(
+        _simple_low, simple_high = estimate_build_cost(
             simple_state, "anthropic", "claude-sonnet-4-20250514"
         )
-        complex_low, complex_high = estimate_build_cost(
+        _complex_low, complex_high = estimate_build_cost(
             complex_state, "anthropic", "claude-sonnet-4-20250514"
         )
 
@@ -135,8 +135,8 @@ class TestCostEstimation:
 
         fullstack_state = {"prd": None, "architecture": fullstack_arch}
 
-        backend_low, backend_high = estimate_duration(backend_state, "anthropic")
-        fullstack_low, fullstack_high = estimate_duration(fullstack_state, "anthropic")
+        _backend_low, backend_high = estimate_duration(backend_state, "anthropic")
+        _fullstack_low, fullstack_high = estimate_duration(fullstack_state, "anthropic")
 
         # Fullstack should take longer (or equal)
         assert fullstack_high >= backend_high

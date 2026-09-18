@@ -12,7 +12,6 @@ A real LLM is NOT used; everything is mocked at the agent-node boundary.
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -159,25 +158,16 @@ class TestChatFlow:
 
         session._transcript_path = get_chat_path("test-done", base_dir=tmp_path)
 
-        # Spy on aupdate_state to verify __DRAFT__ was injected into state
-        update_state_calls: list[dict[str, Any]] = []
-        original_update = None
-
         with patch(
             "loom.graph.builder.product_manager_node",
             new=AsyncMock(side_effect=fake_pm),
         ):
             # Run the session — first input feeds PM, /done injects __DRAFT__,
             # /quit terminates. Wrap in try because downstream nodes aren't mocked.
+            # Downstream nodes aren't mocked, so the run may raise once it
+            # gets past PM; the transcript written along the way is the proof.
             try:
-                # Capture aupdate_state calls
-                async def _run():
-                    nonlocal original_update
-                    # Initialize the graph first by calling run partially.
-                    # We instead inspect the transcript afterwards as proof.
-                    return await session.run()
-
-                await _run()
+                await session.run()
             except Exception:
                 pass
 

@@ -1,12 +1,14 @@
 [project]
-name = "loom"
+# PyPI distribution name. The project is "Loom" and the command is `loom`,
+# but the bare `loom` name on PyPI is taken by an unrelated package.
+name = "loom-build"
 version = "0.1.0"
 description = "Autonomous software development team built on LangGraph"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Loom Team"}
+    {name = "Rihaan Shameer"}
 ]
 keywords = ["langchain", "langgraph", "agents", "llm", "ai", "code-generation"]
 classifiers = [
@@ -81,6 +83,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loom"]
+
+# Ship the built dashboard inside the wheel so `loom ui` works for users who
+# pip-installed rather than cloned. `frontend/dist` is a build artifact and is
+# not committed, so the hook below includes it only when it exists - build it
+# with: cd frontend && npm install && npm run build
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
 
 [tool.ruff]
 line-length = 100

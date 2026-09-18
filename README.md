@@ -1,5 +1,9 @@
 # Loom — Autonomous Software Development Team
 
+[![CI](https://github.com/rihaans/Loom/actions/workflows/ci.yml/badge.svg)](https://github.com/rihaans/Loom/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 > Type a project idea. Watch a team of AI agents collaborate — generate, **review each other's work**, and self-correct. Walk away with a working, tested, containerized MVP.
 
 Loom is a multi-agent system built on **LangGraph** (orchestration / state machine) and **LangChain** (provider-agnostic LLM layer) that takes a natural-language project description and produces a complete codebase: PRD → architecture → parallel-built frontend + backend → **automated code review with a generator–critic loop** → tests run in a Docker sandbox → Dockerfile + CI/CD → architectural decision records.
@@ -185,7 +189,10 @@ The pipeline is a [LangGraph state machine](https://langchain-ai.github.io/langg
 ## Quick Start
 
 ```bash
-# Clone + install
+# Install
+pip install loom-build          # the command is `loom`
+
+# ...or from source
 git clone https://github.com/rihaans/Loom.git
 cd Loom
 pip install -e ".[dev]"
@@ -210,7 +217,7 @@ Then type a project idea at the `You ▸` prompt and let the agents work.
 
 ### 1. Python environment
 
-Loom requires **Python 3.10+** (3.12 recommended). Install in editable mode with dev dependencies:
+Loom requires **Python 3.11+** (3.12 recommended). Install in editable mode with dev dependencies:
 
 ```bash
 pip install -e ".[dev]"
@@ -237,7 +244,7 @@ pip install -e ".[dev,memory]"
 
 ### 3. Docker (for the QA sandbox)
 
-QA tests run inside a Docker container for safety. If you don't have Docker, Loom falls back to a stub mode (tests pass automatically — useful for fast iteration but not real validation).
+QA tests run inside a Docker container for safety. **Without Docker, no tests actually run.** Loom still completes the build, but the test report is explicitly marked unverified and the CLI prints a warning — it will not tell you tests passed when nothing executed. Pass `--require-sandbox` to fail the build instead.
 
 ```bash
 docker --version          # confirm Docker is installed
@@ -252,7 +259,7 @@ loom doctor
 ```
 
 Output should show green `[OK]` for:
-- Python 3.10+
+- Python 3.11+
 - At least one LLM provider configured (API key OR Ollama running)
 - `prompt_toolkit`, `rich`, `aiosqlite` installed
 - TTY detected
@@ -295,6 +302,12 @@ After "yes", PM drafts the PRD, the panel renders, and the Architect proposes a 
 
 ```bash
 loom build "A Flask API for expense tracking with monthly summaries"
+
+# Refuse to finish unless tests actually ran in a sandbox
+loom build "..." --require-sandbox
+
+# Refuse to write into an output directory that already has files
+loom build "..." --no-overwrite
 ```
 
 No conversation — the PM and Architect produce their artifacts in a single LLM call each, and the build proceeds straight through.
@@ -315,6 +328,35 @@ loom history show <id>       # replay a transcript
 loom resume <thread_id>      # resume from the last checkpoint
 ```
 
+### Iterating cheaply
+
+Every agent's output is cached against a hash of its inputs, so re-running a
+build reuses work instead of paying for it again. On a local 7B model an
+identical rebuild went from **177.3s to 10.8s** with all 8 stages reused,
+producing byte-identical output.
+
+```bash
+loom cache status           # entries, size, location (~/.loom/artifacts)
+loom cache clear            # drop everything
+loom build "..." --no-cache # ignore the cache and regenerate every stage
+```
+
+One thing legitimately causes misses: memory. It injects past builds into the
+architect's prompt and every build adds to it, so the prompt genuinely differs
+each run and the cache correctly misses. Use `--no-memory` for reproducible,
+cache-friendly runs.
+
+### Capping spend
+
+```toml
+[cost]
+budget_usd = 1.00           # hard stop; checked before each expensive agent
+warn_threshold_usd = 0.50
+```
+
+The build stops cleanly when the cap is reached, keeping whatever was produced
+and reporting what was spent.
+
 ### Other commands
 
 ```bash
@@ -328,6 +370,8 @@ loom sandbox build        # build the sandbox image
 loom memory status        # vector store stats
 loom memory list          # list past builds in memory
 loom memory search "..."  # semantic search over past builds
+loom cache status         # artifact cache stats
+loom cache clear          # empty the artifact cache
 loom ui                   # launch the web dashboard
 ```
 
@@ -494,14 +538,14 @@ model = "qwen2.5-coder:7b"      # mostly templated, free is fine
 
 ### Tech stack
 
-- **Python 3.10+** — async-first
+- **Python 3.11+** — async-first
 - **LangChain + LangGraph** — agent orchestration, state machine
 - **Pydantic v2** — typed contracts between agents
 - **Typer + Rich + prompt_toolkit** — CLI and chat REPL
 - **FastAPI + React** — optional web dashboard (`loom ui`)
 - **Docker** — code execution sandbox for QA tests
 - **SQLite + LanceDB** — checkpointing and vector memory
-- **pytest** — 475+ tests covering state, agents, graph, the review loop, and chat flow
+- **pytest** — 500 tests covering state, agents, graph, the review loop, and chat flow
 
 ### How agents talk
 
@@ -548,7 +592,7 @@ QA tests run inside a Docker container with:
 - No network access
 - Read-only mount of generated code
 
-If Docker isn't available, Loom uses a stub sandbox that auto-passes — fine for development but not real validation. `loom sandbox build` constructs the Docker image (Python 3.12 + Node 20 + common test runners).
+If Docker isn't available, Loom emits a test report flagged `is_stub` — nothing was executed, `all_passed` is False, and no coverage figure is reported. The CLI surfaces this as a warning, and `--require-sandbox` turns it into a hard failure. `loom sandbox build` constructs the Docker image (Python 3.12 + Node 20 + common test runners).
 
 ---
 
@@ -678,7 +722,7 @@ The test suite uses **mocked LLMs** for unit tests and **fully scripted** end-to
 
 ### Current state
 
-- **475 tests passing**
+- **500 tests passing**
 - 0 regressions on the legacy `loom build` path
 - Real-LLM e2e validation: manual
 
@@ -705,7 +749,7 @@ loom/
 
 ## Status
 
-**Phases 0–9 complete.** The chat REPL works end-to-end through PM → Architect → parallel dev → **Code Reviewer** → QA → DevOps. 475 tests pass. Build outputs are runnable.
+**Phases 0–9 complete.** The chat REPL works end-to-end through PM → Architect → parallel dev → **Code Reviewer** → QA → DevOps. 500 tests pass. Build outputs are runnable.
 
 **What's working:**
 - ✅ Multi-turn conversational PM and Architect
@@ -720,18 +764,27 @@ loom/
 - ✅ Chat REPL with typewriter + spinner UX
 - ✅ Transcript persistence + replay
 - ✅ Provider-agnostic LLM layer (Anthropic / OpenAI / Ollama)
-- ✅ 475 tests, zero regressions on legacy path
+- ✅ 500 tests, zero regressions on legacy path
+- ✅ Unverified test runs are labelled as such and never reported as passing
+- ✅ Preflight check — a missing/unreachable LLM provider fails immediately with a fix, not a transport error
+- ✅ Current model pricing; unknown models report "unknown" rather than $0.00
+- ✅ Dashboard build history persists across server restarts
+- ✅ `loom ui` works from a pip install, not just a git checkout
+- ✅ Artifact cache — identical rebuilds reuse every stage (measured 16.4x, byte-identical output)
+- ✅ Schema no longer duplicated into prompts under native structured output (~2,800 tok/build)
+- ✅ Cost budget actually enforced
 
 **Known limitations:**
+- **Generated code quality is not guaranteed.** Loom scaffolds a complete, structured project and reviews it with a second model, but you should read what it produces before trusting it. Run with Docker so the tests actually execute.
 - Conversational quality with `qwen2.5-coder:7b` is rough (the model is code-tuned, not chat-tuned). Use `llama3.1:8b` or Claude/GPT for smoother chat.
 - The chat REPL animates each agent reply with a typewriter effect over the *completed* response, not live per-token streaming. Real token streaming is intentionally deferred for the conversational agents because the PM's reply protocol wraps text in JSON (`{"message": …}`) that is unwrapped after the call — streaming raw tokens would surface the JSON. The streaming infrastructure (`astream_events` → typed events) exists in `observability/` for the non-interactive build path.
 - The web dashboard (`loom ui`) is functional but not fully polished.
 
 **Roadmap:**
 - Stream the Architect's (plain-text) turns live, and migrate the PM reply protocol off JSON-wrapping so it can stream too
-- File-write confirmation gate before `output/` materialization
-- Better error panels for Docker / Ollama / API failures
+- Publish a worked example under `examples/` — a real build with its real cost and real test output
 - 90-second demo screencap
+- Interactive confirmation prompt (beyond the current `--no-overwrite` refusal) before materializing over existing files
 
 See the [architecture decision records](docs/adrs/) for the reasoning behind the key design choices.
 

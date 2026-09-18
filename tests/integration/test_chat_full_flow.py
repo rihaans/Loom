@@ -22,6 +22,18 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
+from loom.cli.chat.session import ChatSession, looks_affirmative
+from loom.config import LoomConfig
+from loom.state.models import (
+    PRD,
+    ArchitectureDoc,
+    Priority,
+    ProjectType,
+    TechChoice,
+    TechLayer,
+    UserStory,
+)
+
 
 def _make_renderer_mock() -> MagicMock:
     """Build a renderer mock with a working `thinking()` context manager."""
@@ -36,18 +48,6 @@ def _make_renderer_mock() -> MagicMock:
     renderer.render_agent_message_animated = AsyncMock()
     return renderer
 
-
-from loom.cli.chat.session import ChatSession, looks_affirmative
-from loom.config import LoomConfig
-from loom.state.models import (
-    PRD,
-    ArchitectureDoc,
-    Priority,
-    ProjectType,
-    TechChoice,
-    TechLayer,
-    UserStory,
-)
 
 # ---------------------------------------------------------------------------
 # Affirmative detection unit tests

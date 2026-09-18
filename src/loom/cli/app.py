@@ -3,7 +3,7 @@
 import asyncio
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -15,6 +15,26 @@ from rich.table import Table
 # Braille spinner glyphs, so fall back to ASCII line spinner there.
 _is_windows = sys.platform == "win32"
 
+
+def _ensure_utf8_output() -> None:
+    """Make stdout/stderr UTF-8 so redirected output isn't mojibake.
+
+    On Windows, piping to a file gives stdout the ANSI code page (cp1252),
+    which mangles the em-dashes and box glyphs used throughout Loom's output.
+    Reconfiguring is a no-op where the encoding is already UTF-8.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # pragma: no cover - detached/odd streams
+            pass
+
+
+_ensure_utf8_output()
+
 app = typer.Typer(
     name="loom",
     help="Autonomous software development team built on LangGraph.",
@@ -22,18 +42,28 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
-# Modern Windows Terminal / PowerShell support truecolor + Unicode natively.
-# Forcing legacy_windows=True would downgrade the gradient logo to 16-color
-# ANSI; we let rich auto-detect (legacy_windows=False on capable terminals).
-console = Console(force_terminal=True, color_system="truecolor")
+# Modern Windows Terminal / PowerShell support truecolor + Unicode natively, so
+# we force terminal mode to keep the gradient logo - but only when stdout really
+# is a TTY. Forcing it unconditionally made Rich animate into pipes and log
+# files, emitting one spinner frame per redraw (hundreds of lines per build).
+_stdout_is_tty = sys.stdout.isatty()
+console = Console(
+    force_terminal=True if _stdout_is_tty else None,
+    color_system="truecolor" if _stdout_is_tty else None,
+)
+
+if TYPE_CHECKING:
+    from loom.config import BuildResult, LoomConfig
 
 # Subcommand groups
 sandbox_app = typer.Typer(help="Sandbox management commands")
 config_app = typer.Typer(help="Configuration commands")
 memory_app = typer.Typer(help="Memory system commands")
+cache_app = typer.Typer(help="Artifact cache commands")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(config_app, name="config")
 app.add_typer(memory_app, name="memory")
+app.add_typer(cache_app, name="cache")
 
 
 @app.callback()
@@ -57,12 +87,67 @@ def main(
 
         config.llm_default = parse_llm_string(model)
 
+    _preflight_or_exit(config)
+
     renderer = ChatRenderer(console=console, plain=plain)
     session = ChatSession(config=config, renderer=renderer)
     try:
         asyncio.run(session.run())
     except KeyboardInterrupt:
         console.print("\n[dim]Interrupted.[/dim]")
+
+
+def _preflight_or_exit(config: "LoomConfig") -> None:
+    """Abort with a readable message when no LLM provider is usable."""
+    from loom.llm.preflight import ProviderUnavailableError, check_provider
+
+    try:
+        check_provider(config.llm_default)
+    except ProviderUnavailableError as e:
+        console.print()
+        console.print(f"[red]Cannot start:[/red] {e}")
+        raise typer.Exit(1)
+
+
+def _render_build_result(result: "BuildResult") -> None:
+    """Print a build result, making test verification status unmissable.
+
+    A build whose tests never actually ran is reported as such - we never let
+    a stubbed QA report read like a passing test run.
+    """
+    console.print("\n[green][OK] Build complete![/green]")
+    console.print(f"  Output: [cyan]{result.output_dir}[/cyan]")
+    console.print(f"  Tokens: {result.total_tokens:,}")
+    if result.total_cost_usd > 0:
+        console.print(f"  Cost: ${result.total_cost_usd:.4f}")
+    elif result.cost_status == "free":
+        console.print("  Cost: $0.00 [dim](local model)[/dim]")
+    else:
+        console.print("  Cost: [dim]unknown - no published price for this model[/dim]")
+    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+
+    total_stages = result.cache_hits + result.cache_misses
+    if total_stages:
+        if result.cache_hits:
+            console.print(
+                f"  Reused: {result.cache_hits}/{total_stages} stages from cache "
+                f"[dim](no tokens, no wait)[/dim]"
+            )
+        else:
+            console.print(f"  Reused: 0/{total_stages} stages [dim](all regenerated)[/dim]")
+
+    if result.tests_verified:
+        verdict = "passed" if result.test_passed else "FAILED"
+        console.print(f"  Tests: {verdict} (ran in sandbox)")
+    else:
+        console.print(
+            "\n[yellow]  WARNING: tests were NOT run.[/yellow] No sandbox was "
+            "available, so the generated code is [bold]unverified[/bold]."
+        )
+        console.print(
+            "[dim]  Install Docker and run `loom sandbox build` to test for real, "
+            "or pass --require-sandbox to fail instead of continuing.[/dim]"
+        )
 
 
 @app.command()
@@ -86,6 +171,21 @@ def build(
         False, "--no-memory", help="Disable memory system for this build"
     ),
     no_adrs: bool = typer.Option(False, "--no-adrs", help="Disable ADR generation in output"),
+    require_sandbox: bool = typer.Option(
+        False,
+        "--require-sandbox",
+        help="Fail if no test sandbox is available instead of leaving code unverified",
+    ),
+    no_overwrite: bool = typer.Option(
+        False,
+        "--no-overwrite",
+        help="Refuse to write into an output directory that already has files",
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        help="Ignore cached artifacts and regenerate every stage from the model",
+    ),
 ) -> None:
     """Build a project from a natural language description."""
     from loom import build_sync
@@ -108,6 +208,18 @@ def build(
     if no_adrs:
         config.adr.enabled = False
 
+    if require_sandbox:
+        config.require_sandbox = True
+
+    if no_cache:
+        from loom.cache import ArtifactCache, set_cache
+
+        set_cache(ArtifactCache(enabled=False))
+
+    # Fail fast with an actionable message rather than a transport error from
+    # deep inside the graph.
+    _preflight_or_exit(config)
+
     if plain:
         # Simple progress output (use ASCII spinner on Windows)
         spinner = SpinnerColumn(spinner_name="line" if _is_windows else "dots")
@@ -124,21 +236,22 @@ def build(
                     output_dir=output_dir,
                     interactive=interactive,
                     use_persistence=not plain,
+                    overwrite=not no_overwrite,
                 )
-                progress.update(task, completed=True)
-
-                if result.success:
-                    console.print("\n[green][OK] Build complete![/green]")
-                    console.print(f"  Output: [cyan]{result.output_dir}[/cyan]")
-                    console.print(f"  Tokens: {result.total_tokens:,}")
-                    console.print(f"  Cost: ${result.total_cost_usd:.4f}")
-                    console.print(f"  Duration: {result.duration_seconds:.1f}s")
-                else:
-                    console.print(f"\n[red][FAIL] Build failed:[/red] {result.error}")
-                    raise typer.Exit(1)
             except Exception as e:
+                progress.update(task, completed=True)
                 console.print(f"\n[red]Error:[/red] {e}")
                 raise typer.Exit(1)
+
+            progress.update(task, completed=True)
+
+        # Outside the try/progress block: typer.Exit is control flow, not an
+        # error, and must not be swallowed by the handler above.
+        if result.success:
+            _render_build_result(result)
+        else:
+            console.print(f"\n[red][FAIL] Build failed:[/red] {result.error}")
+            raise typer.Exit(1)
     else:
         # TUI mode
         try:
@@ -153,9 +266,10 @@ def build(
                 config=config,
                 output_dir=output_dir,
                 interactive=interactive,
+                overwrite=not no_overwrite,
             )
             if result.success:
-                console.print(f"[green][OK] Build complete![/green] Output: {result.output_dir}")
+                _render_build_result(result)
             else:
                 console.print(f"[red][FAIL] Build failed:[/red] {result.error}")
                 raise typer.Exit(1)
@@ -354,17 +468,16 @@ def ui(
     console.print(f"  Server: http://{host}:{port}")
 
     if not dev:
-        # Check for built frontend
-        frontend_dist = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
-        if frontend_dist.exists():
-            console.print(f"  Frontend: {frontend_dist}")
-            from loom.server.main import mount_static_files
+        from loom.server.main import find_dashboard_dist, mount_static_files
 
+        frontend_dist = find_dashboard_dist()
+        if frontend_dist is not None:
+            console.print(f"  Frontend: {frontend_dist}")
             mount_static_files(frontend_dist)
         else:
-            console.print(
-                "[yellow]  Frontend not built. Run 'cd frontend && npm run build' or use --dev[/yellow]"
-            )
+            console.print("[yellow]  Dashboard not built - serving the API only.[/yellow]")
+            console.print("[dim]  Build it with: cd frontend && npm install && npm run build[/dim]")
+            console.print("[dim]  Or run the Vite dev server separately with --dev.[/dim]")
 
     console.print("\n[dim]Press Ctrl+C to stop[/dim]\n")
 
@@ -440,7 +553,8 @@ def doctor() -> None:
             console.print("[yellow][--][/yellow] Sandbox image not built (run: loom sandbox build)")
     else:
         console.print(
-            "[yellow][--][/yellow] Docker not available (sandbox will use subprocess fallback)"
+            "[yellow][--][/yellow] Docker not available - tests will NOT run; "
+            "results are reported as unverified"
         )
 
     # Chat-mode prerequisites (Phase 9)
@@ -1173,3 +1287,50 @@ def history_show(
 
 if __name__ == "__main__":
     app()
+
+
+@cache_app.command("status")
+def cache_status() -> None:
+    """Show what the artifact cache is holding."""
+    from loom.cache import get_cache
+
+    cache = get_cache()
+    count = cache.entry_count()
+    size_kb = cache.size_bytes() / 1024
+
+    table = Table(title="Artifact Cache", show_header=False, box=None)
+    table.add_row("Location", str(cache.cache_dir))
+    table.add_row("Enabled", "yes" if cache.enabled else "no")
+    table.add_row("Entries", str(count))
+    table.add_row("Size", f"{size_kb:,.1f} KB")
+    console.print(table)
+
+    if count == 0:
+        console.print()
+        console.print(
+            "[dim]Empty. Artifacts are cached automatically as builds run; "
+            "re-running an identical build then costs nothing.[/dim]"
+        )
+
+
+@cache_app.command("clear")
+def cache_clear(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
+) -> None:
+    """Delete every cached artifact."""
+    from loom.cache import get_cache
+
+    cache = get_cache()
+    count = cache.entry_count()
+    if count == 0:
+        console.print("[dim]Cache is already empty.[/dim]")
+        return
+
+    if not yes:
+        confirmed = typer.confirm(f"Delete {count} cached artifact(s)?")
+        if not confirmed:
+            console.print("[dim]Left unchanged.[/dim]")
+            return
+
+    removed = cache.clear()
+    console.print(f"[green]Removed {removed} cached artifact(s).[/green]")
