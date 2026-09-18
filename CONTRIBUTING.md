@@ -67,8 +67,59 @@ suite uses mocked LLMs and makes no network calls.
 
 ## Project layout
 
-See the [Development section of the README](README.md#development) for the
-annotated source tree.
+```
+src/loom/
+├── adr/              ← architectural decision records
+├── agents/
+│   ├── architect.py
+│   ├── backend_dev.py
+│   ├── frontend_dev.py
+│   ├── product_manager.py    ← chat-mode + legacy paths
+│   ├── reviewer.py           ← Code Reviewer (generator–critic, Command handoffs)
+│   ├── qa_engineer.py
+│   ├── devops_engineer.py
+│   ├── memory_retrieve.py
+│   ├── memory_persist.py
+│   ├── base.py               ← build_agent_chain + structured-output binding
+│   └── prompts/              ← all system prompts
+├── cli/
+│   ├── app.py                ← Typer CLI entry point
+│   ├── chat/
+│   │   ├── session.py        ← REPL loop driver
+│   │   ├── renderer.py       ← rich-based output
+│   │   ├── input.py          ← prompt_toolkit input
+│   │   ├── commands.py       ← slash command parser
+│   │   └── transcript.py     ← session persistence
+│   └── tui.py                ← legacy Textual TUI
+├── config/                   ← LoomConfig + per-agent LLM overrides
+├── core.py                   ← public build/resume API
+├── cost/                     ← cost estimation
+├── graph/
+│   ├── builder.py            ← StateGraph wiring
+│   ├── routing.py            ← conditional edge functions
+│   ├── parallel.py           ← Send API helpers
+│   └── checkpoint.py         ← MemorySaver / SqliteSaver
+├── llm/                      ← provider-agnostic LLM layer
+├── memory/                   ← vector store + retrieval
+├── observability/            ← logging, tracing, metrics
+├── output/                   ← writes generated projects to disk
+├── plan/                     ← cost preview without code generation
+├── sandbox/                  ← Docker test runner
+├── server/                   ← FastAPI dashboard backend
+└── state/
+    ├── enums.py              ← Phase, AgentRole, EventType, etc.
+    ├── models.py             ← AgentState, PRD, ArchitectureDoc, etc.
+    └── reducers.py           ← merge_dicts, merge_messages_dict, etc.
+
+tests/
+├── unit/                     ← agent + state + graph unit tests
+└── integration/              ← end-to-end pipeline tests
+
+docker/sandbox.Dockerfile     ← QA sandbox image
+docs/adrs/                    ← architecture decision records
+loom.example.toml             ← config template
+pyproject.toml                ← deps + entry points + tooling
+```
 
 ## Debugging
 
