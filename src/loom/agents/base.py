@@ -1,13 +1,15 @@
 """Base agent factory and utilities."""
 
 import logging
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 
+from loom.cache import cache_key, get_cache
 from loom.config import LoomConfig
 from loom.llm import get_llm_for_role
 from loom.state.enums import AgentRole
@@ -15,6 +17,21 @@ from loom.state.enums import AgentRole
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+# Reserved key an agent may put in its prompt input to name the *logical*
+# request, independent of which retry attempt is being made. Parse retries
+# append feedback to the prompt, so without this the artifact would be cached
+# under the retried prompt and a rerun - which starts from attempt 1 - would
+# always miss, then cascade misses through every downstream agent.
+CACHE_SCOPE_KEY = "__cache_scope__"
+
+
+class StructuredOutputError(RuntimeError):
+    """Raised when a model cannot produce a usable structured artifact.
+
+    Carries guidance about the likely cause, since the common trigger is a
+    small local model that cannot reliably emit tool calls.
+    """
 
 
 def _bind_structured_output(llm: BaseChatModel, output_model: type[T]) -> Any | None:
@@ -85,6 +102,7 @@ def build_agent_chain(
     llm: BaseChatModel,
     include_history: bool = False,
     use_structured_output: bool = True,
+    agent_name: str = "",
 ) -> tuple[Any, PydanticOutputParser[T]]:
     """Build a LangChain chain for an agent.
 
@@ -118,23 +136,143 @@ def build_agent_chain(
     if include_history:
         messages.append(MessagesPlaceholder("history", optional=True))
 
-    # Append format instructions to human template
-    human_with_format = f"{human_template}\n\n{{format_instructions}}"
-    messages.append(("human", human_with_format))
+    # Two prompt variants. Native structured output already constrains the
+    # model to the schema, so repeating the JSON schema in the prompt is dead
+    # weight - roughly 400-1000 tokens per call, on every agent and every
+    # retry. The text parser genuinely needs it, so the fallback keeps it.
+    human_with_format = (
+        human_template
+        + """
 
-    # Create prompt template
-    prompt = ChatPromptTemplate.from_messages(messages)
+{format_instructions}"""
+    )
+    native_prompt = ChatPromptTemplate.from_messages([*messages, ("human", human_template)])
+    text_prompt = ChatPromptTemplate.from_messages([*messages, ("human", human_with_format)])
+
+    # Content-addressed caching. The key covers the prompts, the rendered
+    # inputs, the model and the schema, so a hit is only ever returned for a
+    # request that would have produced the same artifact anyway.
+    label = agent_name or output_model.__name__
+    model_id = _model_identity(llm)
+
+    def _key(prompt_input: dict[str, Any]) -> str:
+        # Key off the caller's canonical request when it named one, so every
+        # retry attempt for the same logical request shares a cache entry.
+        scope = prompt_input.get(CACHE_SCOPE_KEY)
+        basis = scope if isinstance(scope, dict) else prompt_input
+        return cache_key(
+            agent=label,
+            system_prompt=system_prompt,
+            human_template=human_template,
+            prompt_input={k: v for k, v in basis.items() if k != CACHE_SCOPE_KEY},
+            model_id=model_id,
+            output_model=output_model.__name__,
+        )
+
+    def _render_input(prompt_input: dict[str, Any]) -> dict[str, Any]:
+        """Drop Loom-internal keys before the prompt template sees the input."""
+        if CACHE_SCOPE_KEY not in prompt_input:
+            return prompt_input
+        return {k: v for k, v in prompt_input.items() if k != CACHE_SCOPE_KEY}
+
+    def _estimate_tokens(prompt_input: dict[str, Any]) -> int:
+        """Rough input size, recorded so a cache hit can report what it saved."""
+        size = len(system_prompt) + len(human_template)
+        size += sum(len(str(v)) for v in prompt_input.values())
+        return size // 4
 
     structured_llm = _bind_structured_output(llm, output_model) if use_structured_output else None
-    if structured_llm is not None:
-        # Native path: the model is constrained to the schema and returns a
-        # validated instance directly — no text parsing step.
-        chain = prompt | structured_llm
-    else:
-        # Legacy path: parse JSON out of the model's free-text response.
-        chain = prompt | llm | parser
 
-    return chain, parser
+    # Built on demand: composing it requires `llm` to be a Runnable, which only
+    # matters if we actually need the text path.
+    def text_chain() -> Any:
+        return text_prompt | llm | parser
+
+    def _no_output() -> StructuredOutputError:
+        return StructuredOutputError(
+            f"Model produced no usable {output_model.__name__}. This usually means "
+            f"the model is too small or not tuned for tool calling - try a larger "
+            f"model (e.g. ollama:llama3.1:8b) or a hosted provider."
+        )
+
+    if structured_llm is None:
+        # Provider can't do native structured output at all: parse JSON out of
+        # the model's free-text response.
+        def _generate(prompt_input: dict[str, Any]) -> Any:
+            return text_chain().invoke(_render_input(prompt_input))
+
+        async def _agenerate(prompt_input: dict[str, Any]) -> Any:
+            return await text_chain().ainvoke(_render_input(prompt_input))
+
+    else:
+        # Native path: the model is constrained to the schema and returns a
+        # validated instance directly - no text parsing step, and no schema text.
+        #
+        # Some providers (notably Ollama) return None instead of raising when
+        # the model fails to emit a usable tool call, which would otherwise
+        # surface as an AttributeError deep in a caller. Fall back to text
+        # parsing there so weaker local models still work.
+        structured_chain = native_prompt | structured_llm
+
+        def _generate(prompt_input: dict[str, Any]) -> Any:
+            result = structured_chain.invoke(_render_input(prompt_input))
+            if result is None:
+                logger.warning(
+                    "Native structured output returned no %s; retrying via text parser.",
+                    output_model.__name__,
+                )
+                result = text_chain().invoke(_render_input(prompt_input))
+            return result
+
+        async def _agenerate(prompt_input: dict[str, Any]) -> Any:
+            result = await structured_chain.ainvoke(_render_input(prompt_input))
+            if result is None:
+                logger.warning(
+                    "Native structured output returned no %s; retrying via text parser.",
+                    output_model.__name__,
+                )
+                result = await text_chain().ainvoke(_render_input(prompt_input))
+            return result
+
+    def _invoke(prompt_input: dict[str, Any]) -> T:
+        cache = get_cache()
+        key = _key(prompt_input)
+        hit = cache.get(key, output_model, agent=label)
+        if hit is not None:
+            return hit
+        result = _generate(prompt_input)
+        if result is None:
+            raise _no_output()
+        cache.put(key, result, agent=label, input_tokens_estimate=_estimate_tokens(prompt_input))
+        return cast(T, result)
+
+    async def _ainvoke(prompt_input: dict[str, Any]) -> T:
+        cache = get_cache()
+        key = _key(prompt_input)
+        hit = cache.get(key, output_model, agent=label)
+        if hit is not None:
+            return hit
+        result = await _agenerate(prompt_input)
+        if result is None:
+            raise _no_output()
+        cache.put(key, result, agent=label, input_tokens_estimate=_estimate_tokens(prompt_input))
+        return cast(T, result)
+
+    return RunnableLambda(_invoke, afunc=_ainvoke), parser
+
+
+def _model_identity(llm: BaseChatModel) -> str:
+    """A stable string identifying the model behind `llm`, for cache keys.
+
+    Two different models must never share a cache entry, so this errs toward
+    being over-specific: an unrecognised model contributes its class name plus
+    whatever model attribute it exposes.
+    """
+    for attr in ("model", "model_name", "model_id"):
+        value = getattr(llm, attr, None)
+        if isinstance(value, str) and value:
+            return f"{type(llm).__name__}:{value}"
+    return type(llm).__name__
 
 
 def get_format_instructions(output_model: type[T]) -> str:
@@ -178,5 +316,6 @@ def create_agent_for_role(
         output_model=output_model,
         llm=llm,
         include_history=include_history,
+        agent_name=str(role),
     )
     return chain, parser, llm

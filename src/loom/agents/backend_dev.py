@@ -7,13 +7,14 @@ import logging
 from typing import Any
 
 from loom._time import now_utc
-from loom.agents.base import build_agent_chain, build_revision_feedback
+from loom.agents.base import CACHE_SCOPE_KEY, build_agent_chain, build_revision_feedback
 from loom.agents.product_manager import TokenTracker
 from loom.agents.prompts.backend_dev import (
     BACKEND_DEV_HUMAN_TEMPLATE,
     BACKEND_DEV_SYSTEM_PROMPT,
 )
 from loom.config import LoomConfig
+from loom.cost import check_budget
 from loom.llm import calculate_cost, create_parse_error_feedback, get_llm_for_role
 from loom.state.enums import AgentRole, EventType, Phase
 from loom.state.models import CostEntry, Event, FileBundle
@@ -155,7 +156,13 @@ async def backend_dev_node(
         human_template=BACKEND_DEV_HUMAN_TEMPLATE,
         output_model=FileBundle,
         llm=llm,
+        agent_name="backend_dev",
     )
+
+    # Stop before spending if this build has already hit its budget.
+    budget_error = check_budget(state, config, "backend developer")
+    if budget_error:
+        return {"error": budget_error, "events": [], "costs": []}
 
     # Get format instructions
     format_instructions = parser.get_format_instructions()
@@ -179,6 +186,9 @@ async def backend_dev_node(
                 "qa_feedback_section": qa_feedback_section,
                 "format_instructions": format_instructions,
             }
+            # All attempts for this request share one cache entry: the
+            # retry feedback is an implementation detail, not a new request.
+            prompt_input[CACHE_SCOPE_KEY] = {**prompt_input, "architecture_json": architecture_json}
 
             bundle = await chain.ainvoke(prompt_input)
 

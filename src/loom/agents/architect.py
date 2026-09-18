@@ -19,7 +19,7 @@ from langchain_core.messages import (
 )
 
 from loom._time import now_utc
-from loom.agents.base import build_agent_chain
+from loom.agents.base import CACHE_SCOPE_KEY, build_agent_chain
 from loom.agents.product_manager import TokenTracker
 from loom.agents.prompts.architect import (
     ARCHITECT_DRAFT_PROMPT,
@@ -29,6 +29,7 @@ from loom.agents.prompts.architect import (
     ARCHITECT_SYSTEM_PROMPT,
 )
 from loom.config import LoomConfig
+from loom.cost import check_budget
 from loom.llm import calculate_cost, create_parse_error_feedback, get_llm_for_role
 from loom.state.enums import AgentRole, EventType, Phase
 from loom.state.models import PRD, ArchitectureDoc, CostEntry, Event
@@ -131,7 +132,13 @@ async def _legacy_one_shot_architect(
         human_template=ARCHITECT_HUMAN_TEMPLATE,
         output_model=ArchitectureDoc,
         llm=llm,
+        agent_name="architect",
     )
+
+    # Stop before spending if this build has already hit its budget.
+    budget_error = check_budget(state, config, "architect")
+    if budget_error:
+        return {"error": budget_error, "events": [], "costs": []}
 
     format_instructions = parser.get_format_instructions()
     prd_json = prd.model_dump_json(indent=2)
@@ -172,6 +179,9 @@ Produce a revised ArchitectureDoc that addresses the feedback while keeping unch
                 "feedback_block": feedback_block,
                 "format_instructions": format_instructions,
             }
+            # All attempts for this request share one cache entry: the
+            # retry feedback is an implementation detail, not a new request.
+            prompt_input[CACHE_SCOPE_KEY] = {**prompt_input, "prd_json": prd_json}
             architecture = await chain.ainvoke(prompt_input)
 
             events = _create_events(architecture)

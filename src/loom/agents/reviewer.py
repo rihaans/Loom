@@ -10,6 +10,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from langgraph.graph import END
 from langgraph.types import Command, Send
 
 from loom.agents.base import build_agent_chain
@@ -19,6 +20,7 @@ from loom.agents.prompts.reviewer import (
     REVIEWER_SYSTEM_PROMPT,
 )
 from loom.config import LoomConfig
+from loom.cost import check_budget
 from loom.llm import calculate_cost, get_llm_for_role
 from loom.state.enums import AgentRole, EventType, Phase, TargetAgent
 from loom.state.models import CostEntry, Event, ReviewReport
@@ -109,7 +111,15 @@ async def code_reviewer_node(
         human_template=REVIEWER_HUMAN_TEMPLATE,
         output_model=ReviewReport,
         llm=llm,
+        agent_name="reviewer",
     )
+
+    # Stop before spending if this build has already hit its budget. The
+    # reviewer routes with Command, so end the run rather than falling through
+    # to QA on money we were told not to spend.
+    budget_error = check_budget(state, config, "code reviewer")
+    if budget_error:
+        return Command(goto=END, update={"error": budget_error})
 
     code_dump, file_count = _dump_code(code_files)
     prompt_input = {

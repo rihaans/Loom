@@ -7,13 +7,14 @@ import logging
 from typing import Any
 
 from loom._time import now_utc
-from loom.agents.base import build_agent_chain
+from loom.agents.base import CACHE_SCOPE_KEY, build_agent_chain
 from loom.agents.product_manager import TokenTracker
 from loom.agents.prompts.devops_engineer import (
     DEVOPS_ENGINEER_HUMAN_TEMPLATE,
     DEVOPS_ENGINEER_SYSTEM_PROMPT,
 )
 from loom.config import LoomConfig
+from loom.cost import check_budget
 from loom.llm import calculate_cost, create_parse_error_feedback, get_llm_for_role
 from loom.state.enums import AgentRole, EventType, Phase
 from loom.state.models import CostEntry, DevOpsBundle, Event
@@ -152,7 +153,13 @@ async def devops_engineer_node(
         human_template=DEVOPS_ENGINEER_HUMAN_TEMPLATE,
         output_model=DevOpsBundle,
         llm=llm,
+        agent_name="devops_engineer",
     )
+
+    # Stop before spending if this build has already hit its budget.
+    budget_error = check_budget(state, config, "devops engineer")
+    if budget_error:
+        return {"error": budget_error, "events": [], "costs": []}
 
     # Get format instructions
     format_instructions = parser.get_format_instructions()
@@ -174,6 +181,9 @@ async def devops_engineer_node(
                 "backend_summary": backend_summary,
                 "format_instructions": format_instructions,
             }
+            # All attempts for this request share one cache entry: the
+            # retry feedback is an implementation detail, not a new request.
+            prompt_input[CACHE_SCOPE_KEY] = {**prompt_input, "architecture_json": architecture_json}
 
             devops = await chain.ainvoke(prompt_input)
 

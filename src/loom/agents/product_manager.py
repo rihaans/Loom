@@ -21,7 +21,7 @@ from langchain_core.messages import (
 from langchain_core.outputs import LLMResult
 
 from loom._time import now_utc
-from loom.agents.base import build_agent_chain
+from loom.agents.base import CACHE_SCOPE_KEY, build_agent_chain
 from loom.agents.prompts import (
     PRODUCT_MANAGER_HUMAN_TEMPLATE,
     PRODUCT_MANAGER_SYSTEM_PROMPT,
@@ -163,6 +163,7 @@ async def _legacy_one_shot_pm(
         human_template=PRODUCT_MANAGER_HUMAN_TEMPLATE,
         output_model=PRD,
         llm=llm,
+        agent_name="product_manager",
     )
 
     format_instructions = parser.get_format_instructions()
@@ -175,6 +176,9 @@ async def _legacy_one_shot_pm(
                 "description": description + feedback,
                 "format_instructions": format_instructions,
             }
+            # All attempts for this request share one cache entry: the
+            # retry feedback is an implementation detail, not a new request.
+            prompt_input[CACHE_SCOPE_KEY] = {**prompt_input, "description": description}
             prd = await chain.ainvoke(prompt_input)
 
             events = _create_events(prd)
