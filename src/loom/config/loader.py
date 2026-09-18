@@ -62,7 +62,7 @@ def parse_llm_string(llm_str: str) -> LLMConfig:
     """Parse an LLM string in format 'provider:model'.
 
     Examples:
-        - "anthropic:claude-sonnet-4-5"
+        - "anthropic:claude-sonnet-5"
         - "openai:gpt-4o"
         - "ollama:qwen2.5-coder:7b"
 
@@ -78,7 +78,7 @@ def parse_llm_string(llm_str: str) -> LLMConfig:
     if ":" not in llm_str:
         raise ValueError(
             f"Invalid LLM string format: '{llm_str}'. Expected 'provider:model' "
-            f"(e.g., 'anthropic:claude-sonnet-4-5')"
+            f"(e.g., 'anthropic:claude-sonnet-5')"
         )
 
     parts = llm_str.split(":", 1)

@@ -8,7 +8,7 @@ from loom.config.models import LLMConfig
 PROVIDER_DEFAULTS = {
     "anthropic": LLMConfig(
         provider="anthropic",
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-5",
         temperature=0.2,
         max_tokens=8192,
     ),
