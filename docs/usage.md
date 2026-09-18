@@ -246,7 +246,7 @@ A minimal `loom.toml`:
 ```toml
 [llm.default]
 provider = "anthropic"
-model = "claude-sonnet-4-5"
+model = "claude-sonnet-5"
 temperature = 0.2
 max_tokens = 4096
 
@@ -274,11 +274,11 @@ You can pin specific agents to specific models — useful for cost optimization 
 ```toml
 [llm.product_manager]
 provider = "anthropic"
-model = "claude-haiku-3-5"      # cheap for clarifying turns
+model = "claude-haiku-4-5"      # cheap for clarifying turns
 
 [llm.backend_dev]
 provider = "anthropic"
-model = "claude-sonnet-4-5"     # quality for code generation
+model = "claude-sonnet-5"       # quality for code generation
 
 [llm.devops_engineer]
 provider = "ollama"
