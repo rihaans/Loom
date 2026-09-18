@@ -15,6 +15,7 @@ from loom.graph.checkpoint import (
     get_checkpoint_config,
 )
 from loom.observability import BuildObserver, StreamEventType
+from loom.server.history import RunRecord, get_history
 from loom.state.enums import Phase
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ class BuildRunner:
 
         run = BuildRun(run_id, description, config, interactive)
         self.runs[run_id] = run
+        self._persist(run)
         return run
 
     def get_run(self, run_id: str) -> BuildRun | None:
@@ -93,8 +95,38 @@ class BuildRunner:
         return self.runs.get(run_id)
 
     def list_runs(self) -> list[BuildRun]:
-        """List all runs."""
+        """List in-memory runs for this server process."""
         return list(self.runs.values())
+
+    def _persist(self, run: BuildRun) -> None:
+        """Write a summary of `run` to durable history.
+
+        Best-effort: history is a convenience for the dashboard, so a failure
+        here must never take down a build.
+        """
+        costs = run.state.get("costs", []) if isinstance(run.state, dict) else []
+        report = run.state.get("test_report") if isinstance(run.state, dict) else None
+        duration = (run.completed_at - run.started_at).total_seconds() if run.completed_at else None
+        try:
+            get_history().save(
+                RunRecord(
+                    run_id=run.run_id,
+                    thread_id=run.thread_id,
+                    description=run.description,
+                    status=run.status,
+                    started_at=run.started_at.isoformat(),
+                    completed_at=run.completed_at.isoformat() if run.completed_at else None,
+                    duration_seconds=duration,
+                    total_tokens=sum(c.input_tokens + c.output_tokens for c in costs),
+                    total_cost_usd=sum(c.cost_usd for c in costs),
+                    tests_verified=bool(
+                        report is not None and not getattr(report, "is_stub", False)
+                    ),
+                    error=run.error,
+                )
+            )
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Could not persist run history for {run.run_id}: {e}")
 
     async def start_run(self, run: BuildRun) -> None:
         """Start a build run in the background."""
@@ -181,6 +213,7 @@ class BuildRunner:
         finally:
             run.completed_at = now_utc()
             run.current_agent = None
+            self._persist(run)
 
             # Notify completion
             await run.notify(

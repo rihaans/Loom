@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from loom._time import now_utc
 from loom.config import load_config, parse_llm_string
+from loom.server.history import get_history
 from loom.server.models import (
     ArtifactResponse,
     BuildRequest,
@@ -83,12 +85,30 @@ async def start_build(request: BuildRequest) -> BuildResponse:
 
 @app.get("/api/runs", response_model=list[RunSummary])
 async def list_runs() -> list[RunSummary]:
-    """List all build runs."""
-    runner = get_runner()
-    runs = runner.list_runs()
+    """List build runs, newest first.
 
-    return [
-        RunSummary(
+    Live runs from this process take precedence; everything else comes from
+    durable history so the list survives a server restart.
+    """
+    runner = get_runner()
+
+    summaries: dict[str, RunSummary] = {}
+
+    # Persisted history first, so live runs can overwrite their own rows.
+    for record in get_history().list():
+        summaries[record.run_id] = RunSummary(
+            run_id=record.run_id,
+            description=record.description,
+            status=record.status,
+            started_at=datetime.fromisoformat(record.started_at),
+            duration_seconds=record.duration_seconds,
+            total_tokens=record.total_tokens,
+            total_cost_usd=record.total_cost_usd,
+        )
+
+    for run in runner.list_runs():
+        costs = run.state.get("costs", [])
+        summaries[run.run_id] = RunSummary(
             run_id=run.run_id,
             description=run.description,
             status=run.status,
@@ -96,11 +116,11 @@ async def list_runs() -> list[RunSummary]:
             duration_seconds=(
                 (run.completed_at - run.started_at).total_seconds() if run.completed_at else None
             ),
-            total_tokens=sum(c.input_tokens + c.output_tokens for c in run.state.get("costs", [])),
-            total_cost_usd=sum(c.cost_usd for c in run.state.get("costs", [])),
+            total_tokens=sum(c.input_tokens + c.output_tokens for c in costs),
+            total_cost_usd=sum(c.cost_usd for c in costs),
         )
-        for run in runs
-    ]
+
+    return sorted(summaries.values(), key=lambda r: r.started_at, reverse=True)
 
 
 @app.get("/api/runs/{run_id}", response_model=RunStatus)
@@ -237,6 +257,25 @@ async def health_check() -> dict[str, Any]:
 # =============================================================================
 # Static Files (for production)
 # =============================================================================
+
+
+def find_dashboard_dist() -> Path | None:
+    """Locate the built dashboard, whether installed or run from a checkout.
+
+    Looks first inside the installed package (`loom/dashboard/`, populated by
+    the wheel build), then falls back to `frontend/dist` in a source checkout.
+    Returns None when the dashboard has not been built.
+    """
+    packaged = Path(__file__).resolve().parent.parent / "dashboard"
+    if (packaged / "index.html").is_file():
+        return packaged
+
+    # Source checkout: src/loom/server/main.py -> repo root
+    checkout = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+    if (checkout / "index.html").is_file():
+        return checkout
+
+    return None
 
 
 def mount_static_files(static_dir: Path) -> None:
