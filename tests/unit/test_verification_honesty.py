@@ -142,3 +142,37 @@ class TestRequireSandboxBranch:
         report = result["test_report"]
         assert report.is_stub is True
         assert report.all_passed is False
+
+
+class TestFailingTestsAreNotSuccess:
+    """A build whose own tests failed must not read, or exit, as success."""
+
+    def _result(self, **kw: object):
+        from loom.config.models import BuildResult
+
+        base: dict[str, object] = {
+            "success": True,
+            "output_dir": "out/x",
+            "phase": "done",
+            "tests_verified": True,
+            "test_passed": True,
+        }
+        base.update(kw)
+        return BuildResult(**base)  # type: ignore[arg-type]
+
+    def test_passing_tests_are_not_a_failure(self) -> None:
+        from loom.cli.app import _tests_failed
+
+        assert _tests_failed(self._result()) is False
+
+    def test_failed_tests_are_a_failure(self) -> None:
+        from loom.cli.app import _tests_failed
+
+        assert _tests_failed(self._result(test_passed=False)) is True
+
+    def test_unverified_is_not_reported_as_failure(self) -> None:
+        """Unverified means unknown, not broken - the warning covers that case."""
+        from loom.cli.app import _tests_failed
+
+        unverified = self._result(tests_verified=False, test_passed=None)
+        assert _tests_failed(unverified) is False

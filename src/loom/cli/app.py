@@ -109,13 +109,26 @@ def _preflight_or_exit(config: "LoomConfig") -> None:
         raise typer.Exit(1)
 
 
+def _tests_failed(result: "BuildResult") -> bool:
+    """True when tests actually ran and did not pass.
+
+    Distinct from "unverified": here we know the project is broken.
+    """
+    return bool(result.tests_verified and not result.test_passed)
+
+
 def _render_build_result(result: "BuildResult") -> None:
     """Print a build result, making test verification status unmissable.
 
     A build whose tests never actually ran is reported as such - we never let
     a stubbed QA report read like a passing test run.
     """
-    console.print("\n[green][OK] Build complete![/green]")
+    if _tests_failed(result):
+        console.print()
+        console.print("[yellow][!] Build finished, but its tests failed.[/yellow]")
+    else:
+        console.print()
+        console.print("[green][OK] Build complete![/green]")
     console.print(f"  Output: [cyan]{result.output_dir}[/cyan]")
     console.print(f"  Tokens: {result.total_tokens:,}")
     if result.total_cost_usd > 0:
@@ -249,6 +262,10 @@ def build(
         # error, and must not be swallowed by the handler above.
         if result.success:
             _render_build_result(result)
+            # A project whose own tests fail is known-broken; exiting 0 would
+            # tell CI everything is fine. Artifacts are still written to disk.
+            if _tests_failed(result):
+                raise typer.Exit(1)
         else:
             console.print(f"\n[red][FAIL] Build failed:[/red] {result.error}")
             raise typer.Exit(1)
@@ -270,6 +287,8 @@ def build(
             )
             if result.success:
                 _render_build_result(result)
+                if _tests_failed(result):
+                    raise typer.Exit(1)
             else:
                 console.print(f"[red][FAIL] Build failed:[/red] {result.error}")
                 raise typer.Exit(1)
