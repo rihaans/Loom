@@ -323,11 +323,21 @@ class SandboxRunner:
             logger.error(f"Dockerfile not found: {dockerfile_path}")
             return False
 
+        # The daemon resolves `dockerfile` relative to the build context and
+        # expects POSIX separators. Passing a Windows path here fails with
+        # "Cannot locate specified Dockerfile: docker\sandbox.Dockerfile".
+        context = dockerfile_path.parent.parent  # project root
+        try:
+            relative_dockerfile = dockerfile_path.resolve().relative_to(context.resolve())
+        except ValueError:
+            logger.error(f"Dockerfile {dockerfile_path} is outside build context {context}")
+            return False
+
         try:
             logger.info(f"Building sandbox image from {dockerfile_path}...")
             _image, logs = self._client.images.build(
-                path=str(dockerfile_path.parent.parent),  # Project root
-                dockerfile=str(dockerfile_path),
+                path=str(context),
+                dockerfile=relative_dockerfile.as_posix(),
                 tag=self.config.image,
                 rm=True,
             )

@@ -323,13 +323,17 @@ def sandbox_build() -> None:
         from loom.sandbox.models import SandboxConfig
 
         runner.config = SandboxConfig()
-        if runner.build_image(dockerfile):
-            console.print("[green][OK] Sandbox image built successfully[/green]")
-        else:
-            console.print("[red][FAIL] Failed to build sandbox image[/red]")
-            raise typer.Exit(1)
+        built = runner.build_image(dockerfile)
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Outside the handler: typer.Exit is control flow, not an error, and must
+    # not be caught and re-reported as "Error: 1".
+    if built:
+        console.print("[green][OK] Sandbox image built successfully[/green]")
+    else:
+        console.print("[red][FAIL] Failed to build sandbox image[/red]")
         raise typer.Exit(1)
 
 
